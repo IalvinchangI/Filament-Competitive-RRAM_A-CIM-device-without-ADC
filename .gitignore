@@ -3,9 +3,10 @@
 *.code-workspace
 .vscode/
 
-# temp, data
+# temp, data, test
 __temp/
 data/
+__test*
 
 
 
