@@ -19,7 +19,7 @@ SCDM 存算一體晶片 - 真實物理層原語 (True Physics Primitives)
 
 import numpy as np
 import logging
-from . import SCDM_HardwareInterface
+from SCDM_Hardware import SCDM_HardwareInterface
 
 class SCDM_HardwarePrimitive(SCDM_HardwareInterface):
     def __init__(self, rows=64, cols=64):

@@ -1,7 +1,7 @@
 from .ModelLoader import ModelLoader
-from .ModelExecuter import ModelExecuter
+from .ModelExecutor import ModelExecutor
 
 __all__ = [
     "ModelLoader", 
-    "ModelExecuter"
+    "ModelExecutor"
 ]
