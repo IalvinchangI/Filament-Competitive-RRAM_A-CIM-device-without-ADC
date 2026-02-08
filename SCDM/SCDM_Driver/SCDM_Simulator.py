@@ -1,4 +1,4 @@
-from SCDM_Hardware import SCDM_HardwarePrimitive as SCDM_Hardware
+from SCDM_Hardware import SCDM_HardwareSimple as SCDM_Hardware
 
 
 class SCDM_Simulator():
