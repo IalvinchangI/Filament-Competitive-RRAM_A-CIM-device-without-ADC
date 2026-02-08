@@ -62,6 +62,7 @@ class LoggingColor():
         )
 
         logger = logging.getLogger(name)
+        logger.propagate = False
 
         # Check if handlers already exist to prevent duplicate log outputs
         # (A common issue when get_logger is called multiple times)
