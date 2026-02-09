@@ -1,3 +1,7 @@
+from SCDM_Driver import SCDM_DriverInterface
+from model_loading import BasicModelLoader
+import numpy
+
 
 class ModelExecutor():
     """
@@ -9,4 +13,46 @@ class ModelExecutor():
     
     ===============================================
     """
-    pass
+    def __init__(self):
+        self._current_loader: BasicModelLoader = None
+        pass
+
+    def config_driver(self, driver: SCDM_DriverInterface):
+        """
+        config all the things related to driver
+        """
+        self._driver = driver
+        pass
+
+    def load(self, model_loader: BasicModelLoader):
+        """
+        config model loader
+        submit matrixes into driver
+        """
+        self._current_loader = model_loader
+        pass
+    
+    def unload(self):
+        """
+        unload current model_loader if exists
+        """
+        self._current_loader = None
+        pass
+
+    def run(self, input_data: numpy.ndarray) -> numpy.ndarray:
+        """
+        pass input_data into model_loader
+        """
+        pass
+
+    def save_info(self, path: str):
+        """
+        log statistic data in the driver into a file specified by path
+        """
+        pass
+
+    def clear_info_cache(self):
+        """
+        reset statistic data in the driver
+        """
+        pass
