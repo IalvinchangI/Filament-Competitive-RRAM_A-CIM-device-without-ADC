@@ -1,5 +1,5 @@
 
-class ModelLoader():
+class BasicModelLoader():
     """
     ModelLoader
     ===============================================
@@ -11,4 +11,7 @@ class ModelLoader():
     ===============================================
     """
 
-    pass
+    def config_execution():
+        pass
+
+    
