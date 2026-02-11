@@ -1,0 +1,121 @@
+import math
+import numpy as np
+from typing import List
+from SCDM_Hardware import SCDM_HardwareSimple as Hardware
+from utils import LoggingColor
+
+class VirtualMatrix():
+    """
+    VirtualMatrix
+    ===============================================
+    負責將一個巨大的邏輯矩陣 (Logical Matrix) 切割並映射到多個
+    物理硬體 (SCDM_HardwareSimple) 上。
+    
+    職責：
+    1. Tiling (Padding -> Slicing)
+    2. 管理多個 Hardware 實例
+    3. 執行 Scatter-Gather (分發輸入 -> 收集輸出 -> 累加)
+    ===============================================
+    """
+    
+    # Mode Constants
+    MODE_BINARY = "binary"
+    MODE_MULTIBIT = "multibit"
+
+    def __init__(self, full_matrix: np.ndarray, hw_rows: int, hw_cols: int):
+        self.logger = LoggingColor.get_logger("VirtualMatrix")
+        
+        self.orig_rows, self.orig_cols = full_matrix.shape
+        self.hw_rows = hw_rows
+        self.hw_cols = hw_cols
+        
+        # 計算 Grid 大小 (無條件進位)
+        self.grid_rows = math.ceil(self.orig_rows / hw_rows)
+        self.grid_cols = math.ceil(self.orig_cols / hw_cols)
+        self.total_tiles = self.grid_rows * self.grid_cols
+        
+        # 建立硬體網格: List of Lists storing SCDM_HardwareSimple
+        self.tiles: List[List[Hardware]] = []
+        
+        # 執行切割與燒錄
+        self._tiling_and_program(full_matrix)
+
+    def _tiling_and_program(self, matrix: np.ndarray):
+        """
+        將大矩陣切割並寫入各個硬體 Tile
+        """
+        # 預先 Pad 矩陣以符合硬體倍數
+        pad_r = self.grid_rows * self.hw_rows - self.orig_rows
+        pad_c = self.grid_cols * self.hw_cols - self.orig_cols
+        
+        # 使用 0 填充 (不影響運算結果)
+        padded_matrix = np.pad(matrix, ((0, pad_r), (0, pad_c)), mode='constant', constant_values=0)
+        
+        for r in range(self.grid_rows):
+            row_tiles = []
+            for c in range(self.grid_cols):
+                # 1. 實例化硬體
+                hw = Hardware(rows=self.hw_rows, cols=self.hw_cols)
+                
+                # 2. 切割子矩陣
+                r_start = r * self.hw_rows
+                r_end = r_start + self.hw_rows
+                c_start = c * self.hw_cols
+                c_end = c_start + self.hw_cols
+                
+                sub_matrix = padded_matrix[r_start:r_end, c_start:c_end]
+                
+                # 3. 寫入硬體
+                hw.program_matrix(sub_matrix)
+                row_tiles.append(hw)
+            self.tiles.append(row_tiles)
+            
+        self.logger.info(f"Created VirtualMatrix: {self.orig_rows}x{self.orig_cols} "
+                         f"mapped to {self.grid_rows}x{self.grid_cols} tiles.")
+
+    # TODO 統計數據
+
+    def compute(self, input_vector: np.ndarray, mode: str, bit_depth: int = 8) -> np.ndarray:
+        """
+        執行分塊運算並組合結果。
+        
+        Returns:
+            np.ndarray: Raw Sum (未經 Activation 的整數累加值)
+        """
+        # 1. Pad Input Vector
+        pad_len = self.grid_rows * self.hw_rows - len(input_vector)
+        if pad_len < 0:
+             raise ValueError("Input vector too large for programmed matrix")
+        padded_input = np.pad(input_vector, (0, pad_len), mode='constant', constant_values=0)
+        
+        # 準備輸出緩衝區 (累加 Partial Sums 用，使用 int32 防止溢位)
+        output_buffer = np.zeros(self.grid_cols * self.hw_cols, dtype=int)
+        
+        # 2. 雙重迴圈執行運算 (Row-wise reduce, Col-wise concat)
+        for r in range(self.grid_rows):
+            # 取出對應這列 Tiles 的輸入向量切片
+            r_start = r * self.hw_rows
+            r_end = r_start + self.hw_rows
+            input_slice = padded_input[r_start:r_end]
+            
+            for c in range(self.grid_cols):
+                hw_tile = self.tiles[r][c]
+                
+                # 呼叫硬體並取得 Partial Sum
+                if mode == self.MODE_BINARY:
+                    # 硬體現在回傳的是 Raw Sum，直接累加即可
+                    tile_out = hw_tile.compute_binary(input_slice)
+                elif mode == self.MODE_MULTIBIT:
+                    tile_out = hw_tile.compute_multibit(input_slice, bit_depth=bit_depth)
+                else:
+                    raise ValueError(f"Unknown mode: {mode}")
+                
+                # 累加到對應的 Output Channel
+                c_start = c * self.hw_cols
+                c_end = c_start + self.hw_cols
+                output_buffer[c_start:c_end] += tile_out
+
+        # 3. 裁切掉 Padding 的輸出，直接回傳 Raw Sum
+        final_output = output_buffer[:self.orig_cols]
+            
+        return final_output
