@@ -1,6 +1,6 @@
 import numpy as np
 from SCDM_Hardware import SCDM_HardwareInterface
-from SCDM_Hardware.SCDM_HardwarePrimitive import SCDM_HardwarePrimitive
+from SCDM_Hardware.hardware_primitive import SCDM_HardwarePrimitive
 from utils import LoggingColor
 
 class SCDM_HardwarePythonSim(SCDM_HardwareInterface):

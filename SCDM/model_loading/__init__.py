@@ -1,4 +1,4 @@
-from .BasicModelLoader import BasicModelLoader
+from .basic import BasicModelLoader
 
 __all__ = [
     "BasicModelLoader"

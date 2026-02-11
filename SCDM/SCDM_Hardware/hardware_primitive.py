@@ -19,9 +19,8 @@ SCDM 存算一體晶片 - 真實物理層原語 (True Physics Primitives)
 
 import numpy as np
 import logging
-from SCDM_Hardware import SCDM_HardwareInterface
 
-class SCDM_HardwarePrimitive(SCDM_HardwareInterface):
+class SCDM_HardwarePrimitive():
     def __init__(self, rows=64, cols=64):
         """
         初始化物理層參數 (基於 TSMC 28nm RRAM PDK 數據模型)。

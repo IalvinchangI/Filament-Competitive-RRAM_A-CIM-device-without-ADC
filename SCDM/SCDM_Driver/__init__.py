@@ -1,5 +1,5 @@
-from .SCDM_Simulator import SCDM_Simulator
-from .SCDM_DriverInterface import SCDM_DriverInterface
+from .driver_interface import SCDM_DriverInterface
+from .simulator import SCDM_Simulator
 
 __all__ = [
     "SCDM_DriverInterface", 
