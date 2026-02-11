@@ -92,14 +92,10 @@ class SCDM_HardwareSimple(SCDM_HardwareInterface):
             self._logger.error(LoggingColor.color_text("Invalid Input Vector Values! Must be in {-1, 0, 1}", LoggingColor.ERROR))
             raise ValueError("Invalid Input Vector Values! Must be in {-1, 0, 1}")
 
-        # 1. 理想矩陣乘法
+        # 理想矩陣乘法
         # input_vector: {-1, 0, 1}
         # matrix: {-1, 0, 1}
-        ideal_sum = np.dot(input_vector, self.matrix)
-        
-        # 2. 理想比較器 (Threshold = 0)
-        # >0 -> 1, <0 -> -1, =0 -> 0
-        output = np.sign(ideal_sum).astype(int)
+        output = np.dot(input_vector, self.matrix)
         
         return output
 
