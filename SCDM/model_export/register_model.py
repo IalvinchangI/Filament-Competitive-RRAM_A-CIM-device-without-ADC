@@ -3,11 +3,12 @@ import torchvision
 import torch.nn as nn
 from model_export import ModelImportHandler
 from transformers import AutoConfig, AutoModelForCausalLM
+import argparse
 
 from third_party_models import reactnet
 from spikingjelly.activation_based import neuron, surrogate
 from spikingjelly.activation_based.model.sew_resnet import sew_resnet34 as sew_resnet
-from my_token import HP_TOKEN
+from utils.environment_variables import HP_TOKEN
 
 # ==============================================================================
 # [Vision] BNN: ReActNet-A
@@ -34,7 +35,7 @@ def import_vision_bnn():
             # 1. fix the difference of weight and weights
             # 2. fix shape
             model_state_dict = model.state_dict()
-            new_state_dict = {}
+            new_state_dict = dict()
             for k, v in raw_state_dict.items():
                 k = k.replace('module.', '')
                 
@@ -78,21 +79,58 @@ def import_vision_bnn():
 def import_vision_snn():
     print(f"\n[Vision] Initializing SEW-ResNet (SNN)...")
     try:
-        try:
-            model = sew_resnet(
-                pretrained=True, 
-                spiking_neuron=neuron.IFNode,
-                surrogate_function=surrogate.ATan(),
-                detach_reset=True
-            )
+        weights_path = ModelImportHandler.MODEL_DEFAULT_DIR / "sew34_checkpoint_319.pth"
+        
+        # load model
+        model = sew_resnet(
+            pretrained=False, 
+            spiking_neuron=neuron.IFNode, 
+            surrogate_function=surrogate.ATan(), 
+            cnf="ADD", 
+            detach_reset=True
+        )
+        
+        # load weights
+        if weights_path.exists():
+            print(f" -> Loading real weights from {weights_path.name}...")
+            torch.serialization.add_safe_globals([argparse.Namespace])
+            checkpoint = torch.load(weights_path, map_location=ModelImportHandler.DEVICE)
+            
+            if "state_dict" in checkpoint:
+                raw_state_dict = checkpoint["state_dict"]
+            elif "model" in checkpoint:
+                raw_state_dict = checkpoint["model"]
+            else:
+                raw_state_dict = checkpoint
+
+            # fix the name of weights
+            new_state_dict = dict()
+            for k, v in raw_state_dict.items():
+                new_k = k
+                
+                # fix Conv1 & BN1
+                if 'conv1.module.0' in k:
+                    new_k = k.replace('conv1.module.0', 'conv1')
+                elif 'conv1.module.1' in k:
+                    new_k = k.replace('conv1.module.1', 'bn1')
+                    
+                # fix Conv2 & BN2
+                elif 'conv2.module.0' in k:
+                    new_k = k.replace('conv2.module.0', 'conv2')
+                elif 'conv2.module.1' in k:
+                    new_k = k.replace('conv2.module.1', 'bn2')
+                    
+                # fix downsample
+                elif 'downsample.0.module.0' in k:
+                    new_k = k.replace('downsample.0.module.0', 'downsample.0')
+                elif 'downsample.0.module.1' in k:
+                    new_k = k.replace('downsample.0.module.1', 'downsample.1')
+                
+                new_state_dict[new_k] = v
+            
+            model.load_state_dict(new_state_dict)
             print(" -> Loaded Pre-trained SEW-ResNet weights.")
-        except:
-            model = sew_resnet(
-                pretrained=False, 
-                spiking_neuron=neuron.IFNode,
-                surrogate_function=surrogate.ATan(),
-                detach_reset=True
-            )
+        else:
             print(" -> Loaded Random SEW-ResNet structure.")
             
         model.to(ModelImportHandler.DEVICE)
@@ -120,20 +158,21 @@ def import_nlp_tnn():
                 token=HP_TOKEN
             )
             print(" -> Successfully loaded REAL BitNet weights.")
+            return model
         except Exception as e:
             print(f" -> Download failed ({e}). Using TinyLlama Proxy structure.")
-            config = AutoConfig.from_pretrained("TinyLlama/TinyLlama-1.1B-Chat-v1.0")
-            model = AutoModelForCausalLM.from_config(config)
+            # config = AutoConfig.from_pretrained("TinyLlama/TinyLlama-1.1B-Chat-v1.0")
+            # model = AutoModelForCausalLM.from_config(config)
             
-            print(" -> Applying Fake TNN Quantization (-1, 0, +1)...")
-            with torch.no_grad():
-                for name, param in model.named_parameters():
-                    if 'weight' in name and param.dim() >= 2:
-                        threshold = 0.5 * param.data.abs().mean()
-                        param.data = torch.where(param.data > threshold, torch.tensor(1.0),
-                                     torch.where(param.data < -threshold, torch.tensor(-1.0), torch.tensor(0.0)))
-        
-        return model
+            # print(" -> Applying Fake TNN Quantization (-1, 0, +1)...")
+            # with torch.no_grad():
+            #     for name, param in model.named_parameters():
+            #         if 'weight' in name and param.dim() >= 2:
+            #             threshold = 0.5 * param.data.abs().mean()
+            #             param.data = torch.where(param.data > threshold, torch.tensor(1.0),
+            #                          torch.where(param.data < -threshold, torch.tensor(-1.0), torch.tensor(0.0)))
+            return None
+        # return model
 
     except ImportError:
         print(" -> [Error] 'transformers' not installed. Skipping NLP.")
