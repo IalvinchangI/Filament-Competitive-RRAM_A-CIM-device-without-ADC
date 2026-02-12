@@ -40,7 +40,7 @@ class SCDM_HardwareInterface():
         Args:
             input_vector: 1D numpy array, shape=(rows,). Values in {-1, 0, 1}.
         Returns:
-            output_vector: 1D numpy array, shape=(cols,). Values in {-1, 0, 1}.
+            output_vector: 1D numpy array, shape=(cols,). Values in {-64, 0, 64}.
         """
         raise NotImplementedError()
 
