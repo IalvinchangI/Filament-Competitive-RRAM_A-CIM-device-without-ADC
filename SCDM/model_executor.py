@@ -39,9 +39,10 @@ class ModelExecutor():
         self._current_loader = None
         pass
 
-    def run(self, input_data: numpy.ndarray) -> numpy.ndarray:
+    def run(self, input_data: numpy.ndarray, input_command: str = None) -> numpy.ndarray:
         """
         pass input_data into model_loader
+        user can invoke a loader-specified function via input_command
         """
         pass
 
