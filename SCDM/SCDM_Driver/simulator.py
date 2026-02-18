@@ -16,6 +16,7 @@ class SCDM_Simulator(SCDM_DriverInterface):
     通常是 (Out_Channels, In_Channels * Kernel_H * Kernel_W) 的形狀。
     Simulator 負責的是單純的矩陣乘法 (Matrix Multiplication)，
     im2col 或其他 Tensor 展開的操作應由上層處理完畢後傳入。
+    
     ===============================================
     """
 
