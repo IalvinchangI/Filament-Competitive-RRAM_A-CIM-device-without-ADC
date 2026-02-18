@@ -1,15 +1,12 @@
 import torch
-import torchvision
 import torch.nn as nn
 from model_export import ModelImportHandler
-from transformers import AutoConfig, AutoModelForCausalLM
 import argparse
 
 from third_party_models import reactnet
 from spikingjelly.activation_based import neuron, surrogate
 from spikingjelly.activation_based.model.sew_resnet import sew_resnet34 as sew_resnet
 from models import get_TernaryBitNet
-from utils.environment_variables import HP_TOKEN
 
 # ==============================================================================
 # [Vision] BNN: ReActNet-A
