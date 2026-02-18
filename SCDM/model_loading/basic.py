@@ -1,3 +1,6 @@
+from SCDM_Driver import SCDM_DriverInterface
+
+import numpy
 
 class BasicModelLoader():
     """
@@ -11,7 +14,27 @@ class BasicModelLoader():
     ===============================================
     """
 
-    def config_execution():
+    PREDICT_COMMAND = "predict_command"
+
+    def config(self, driver: SCDM_DriverInterface):
+        """
+        配置硬體
+        TODO
+        """
+        self.driver = driver
+
+    def run(self, input_data: numpy.ndarray, input_command: str = None) -> numpy.ndarray:
+        """
+        吃 input_data
+        根據 input_command 決定執行方法
+        TODO
+        """
         pass
 
-    
+    def unload(self):
+        """
+        把模型卸載
+        例如把 weight 從硬體中刪掉
+        TODO
+        """
+        pass
