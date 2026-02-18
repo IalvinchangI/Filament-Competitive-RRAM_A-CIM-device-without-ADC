@@ -154,7 +154,7 @@ class BitLinear(nn.Linear):
                       If None, reverts to default software simulation.
         """
         if function is None:
-            print(" -> [BitLinear] Mode Switch: Software Simulation (Default)")
+            _logger.info(LoggingColor.color_text("[BitLinear] Mode Switch: Software Simulation (Default)", LoggingColor.GREEN))
             cls._matmul = cls._default_matmul
             return
         
@@ -163,7 +163,7 @@ class BitLinear(nn.Linear):
                 raise RuntimeError("Layer ID not set. Please configure hardware first.")
             return function(x_quant, layer_instance.layer_id)
 
-        print(" -> [BitLinear] Mode Switch: Hardware Acceleration (Driver Mounted)")
+        _logger.info(LoggingColor.color_text("[BitLinear] Mode Switch: Hardware Acceleration (Driver Mounted)", LoggingColor.GREEN))
         cls._matmul = hardware_adapter
 
     def __init__(self, in_features, out_features, bias=False, sub_norm=None):
