@@ -32,18 +32,6 @@ class SCDM_HardwareInterface():
     # 運算指令 (Compute Instructions)
     # =====================================================================
 
-    def compute_binary(self, input_vector: numpy.ndarray) -> numpy.ndarray:
-        """
-        [指令] 二值運算 (Binary Compute / Threshold Mode)
-        執行快速向量矩陣乘法，輸出僅含 {-1, 0, 1}。
-
-        Args:
-            input_vector: 1D numpy array, shape=(rows,). Values in {-1, 0, 1}.
-        Returns:
-            output_vector: 1D numpy array, shape=(cols,). Values in {-64, 0, 64}.
-        """
-        raise NotImplementedError()
-
     def compute_multibit(self, input_data: numpy.ndarray, bit_depth: int = 8) -> numpy.ndarray:
         """
         [指令] 多位元運算 (Multi-bit Compute / Temporal Mode)
