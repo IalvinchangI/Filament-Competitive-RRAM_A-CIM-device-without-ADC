@@ -20,6 +20,8 @@ class TernaryBitNetLoader(BasicModelLoader):
     BIT_DEPTH = 8 # 硬體輸入位元深度 (x_quant 是 int8)
     MAX_TOKEN = 50
     FIX_OUTPUT_GENERATION = False
+    STREAM_GENERATE_TIMEOUT = None  # no timeout
+    # STREAM_GENERATE_TIMEOUT = 20.0
     
     @classmethod
     def set_MAX_TOKEN(cls, value: int):
@@ -53,7 +55,7 @@ class TernaryBitNetLoader(BasicModelLoader):
     INFERENCE_COMMAND = "inference_command"
     STREAM_GENERATE_COMMAND = "stream_generate_command"
 
-    _logger = LoggingColor.get_logger("bitnet")
+    _logger = LoggingColor.get_logger("TernaryBitNetLoader")
 
     @classmethod
     def str2token(cls, string: str) -> numpy.ndarray:
@@ -109,6 +111,7 @@ class TernaryBitNetLoader(BasicModelLoader):
             for new_text in stream_result:
                 print(new_text, end="", flush=True)
         except Exception as e:
+            # TODO stop thread
             cls._logger.error(f"Stream decoding error: {e}")
 
     def __init__(self, model_path: str):
@@ -148,7 +151,7 @@ class TernaryBitNetLoader(BasicModelLoader):
 
                 # 2. 取得量化權重
                 w_quant_tensor = module.get_quantization_weights().to(torch.int8)
-                w_quant_np = w_quant_tensor.cpu().numpy()
+                w_quant_np = w_quant_tensor.cpu().numpy().T
                 
                 # 3. Setup Hardware
                 gid = driver.submit_matrix([w_quant_np])
@@ -221,8 +224,7 @@ class TernaryBitNetLoader(BasicModelLoader):
                 
                 # 2. 建立 Streamer (這是一個 Iterator)
                 # skip_prompt=True: 不重複回傳輸入的字
-                # timeout: 避免子執行緒死掉導致主程式卡死
-                streamer = TextIteratorStreamer(self._tokenizer, skip_prompt=True, skip_special_tokens=True, timeout=20.0)
+                streamer = TextIteratorStreamer(self._tokenizer, skip_prompt=True, skip_special_tokens=True, timeout=self.STREAM_GENERATE_TIMEOUT)
 
                 # 3. 設定生成參數
                 generation_kwargs = dict(
