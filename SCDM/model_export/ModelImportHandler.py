@@ -1,6 +1,7 @@
 from typing_extensions import Callable, Union
 import logging
 from utils import LoggingColor
+from utils.environment_variables import TORCH_DEVICE
 import torch
 from pathlib import Path
 import os
@@ -15,7 +16,7 @@ class ModelImportHandler():
     MODEL_DEFAULT_DIR = Path(os.getcwd()).resolve() / "data" / "model"
     MODEL_FILE_EXTENTION = ".pickle" # torch.save uses pickle by default
 
-    DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+    DEVICE = TORCH_DEVICE
 
     # A private dictionary to store the mapping between model names and their import functions.
     __model_list: dict[str, Callable] = {}

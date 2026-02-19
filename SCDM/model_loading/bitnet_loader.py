@@ -5,10 +5,9 @@ from threading import Thread
 import traceback
 
 from model_loading import BasicModelLoader
-from models import BitLinear 
-from model_export import ModelImportHandler
+from models import BitLinear
 from utils import LoggingColor
-from utils.environment_variables import HP_TOKEN
+from utils.environment_variables import HP_TOKEN, TORCH_DEVICE
 
 from torch import nn
 from typing import Union, Iterator
@@ -119,7 +118,7 @@ class TernaryBitNetLoader(BasicModelLoader):
         # init model
         try:
             self._logger.info(f"⏳ Loading model from {model_path}")
-            self.model: nn.Module = torch.load(model_path, map_location=ModelImportHandler.DEVICE, weights_only=False)
+            self.model: nn.Module = torch.load(model_path, map_location=TORCH_DEVICE, weights_only=False)
             self.model.eval()
             
             # 自動偵測 device
