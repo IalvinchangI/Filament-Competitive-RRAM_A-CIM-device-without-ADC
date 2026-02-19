@@ -3,6 +3,7 @@ import numpy
 from transformers import AutoTokenizer, TextIteratorStreamer
 from threading import Thread
 import traceback
+import gc
 
 from model_loading import BasicModelLoader
 from models import BitLinear
@@ -158,6 +159,13 @@ class TernaryBitNetLoader(BasicModelLoader):
                 # 4. 綁定 ID
                 module.layer_id = gid
                 count += 1
+
+                # 5. 刪除 PyTorch 原本的權重參數，釋放記憶體
+                del module.weight
+        
+        # 強制進行垃圾回收並清空 GPU 快取
+        gc.collect()
+        torch.cuda.empty_cache()
         
         self._logger.info(f"✅ Configured {count} BitLinear layers to Hardware.")
 

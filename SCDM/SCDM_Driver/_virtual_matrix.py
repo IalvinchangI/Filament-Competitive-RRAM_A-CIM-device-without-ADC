@@ -28,9 +28,9 @@ class VirtualMatrix():
     STATISTIC_WEIGHT_NEG1_KEY = "weight_neg1"
     STATISTIC_WEIGHT_0_KEY    = "weight_0"
     STATISTIC_WEIGHT_1_KEY    = "weight_1"
-    STATISTIC_INPUT_NEG_KEY  = "input_neg"
+    STATISTIC_INPUT_NEG_KEY   = "input_neg"
     STATISTIC_INPUT_0_KEY     = "input_0"
-    STATISTIC_INPUT_POS_KEY     = "input_pos"
+    STATISTIC_INPUT_POS_KEY   = "input_pos"
 
     def __init__(self, full_matrix: np.ndarray, hw_rows: int, hw_cols: int, silent_hardware: bool = True):
         self.logger = LoggingColor.get_logger("VirtualMatrix")
