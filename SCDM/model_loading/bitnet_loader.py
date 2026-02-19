@@ -171,7 +171,7 @@ class TernaryBitNetLoader(BasicModelLoader):
 
         # Define Adapter
         def _matmul_hardware_adapter(x_quant_tensor, layer_id: str):
-            x_np = x_quant_tensor.cpu().numpy()
+            x_np = x_quant_tensor.cpu().numpy().astype(numpy.int8)
             y_np = driver.compute_multibit(layer_id, x_np, self.BIT_DEPTH)
             y_tensor = torch.from_numpy(y_np).to(device=x_quant_tensor.device)
             return y_tensor
