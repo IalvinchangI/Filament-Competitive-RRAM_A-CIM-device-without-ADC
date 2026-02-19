@@ -102,7 +102,7 @@ class SCDM_Simulator(SCDM_DriverInterface):
         self.stats["physical_tiles_programmed"] += v_matrix.total_tiles
         self.stats["active_tiles"] += v_matrix.total_tiles
         self.stats["total_tiles_created"] += v_matrix.total_tiles
-        self.stats["total_programmed_weight_neg1"] += v_matrix.weight_stats[VirtualMatrix.STATISTIC_WEIGHT_neg1_KEY]
+        self.stats["total_programmed_weight_neg1"] += v_matrix.weight_stats[VirtualMatrix.STATISTIC_WEIGHT_NEG1_KEY]
         self.stats["total_programmed_weight_0"] += v_matrix.weight_stats[VirtualMatrix.STATISTIC_WEIGHT_0_KEY]
         self.stats["total_programmed_weight_1"] += v_matrix.weight_stats[VirtualMatrix.STATISTIC_WEIGHT_1_KEY]
         
