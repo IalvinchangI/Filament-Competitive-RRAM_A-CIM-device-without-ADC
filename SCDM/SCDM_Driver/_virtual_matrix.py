@@ -1,6 +1,6 @@
 import math
 import numpy as np
-from typing import List
+from typing import List, Tuple, Dict
 from SCDM_Hardware import SCDM_HardwareSimple as Hardware
 from utils import LoggingColor
 import logging
@@ -16,12 +16,21 @@ class VirtualMatrix():
     1. Tiling (Padding -> Slicing)
     2. 管理多個 Hardware 實例
     3. 執行 Scatter-Gather (分發輸入 -> 收集輸出 -> 累加)
+
     ===============================================
     """
     
     # Mode Constants
     MODE_BINARY = "binary"
     MODE_MULTIBIT = "multibit"
+
+    # Statistic Key
+    STATISTIC_WEIGHT_NEG1_KEY = "weight_neg1"
+    STATISTIC_WEIGHT_0_KEY    = "weight_0"
+    STATISTIC_WEIGHT_1_KEY    = "weight_1"
+    STATISTIC_INPUT_NEG_KEY  = "input_neg"
+    STATISTIC_INPUT_0_KEY     = "input_0"
+    STATISTIC_INPUT_POS_KEY     = "input_pos"
 
     def __init__(self, full_matrix: np.ndarray, hw_rows: int, hw_cols: int, silent_hardware: bool = True):
         self.logger = LoggingColor.get_logger("VirtualMatrix")
@@ -39,6 +48,8 @@ class VirtualMatrix():
         
         # 建立硬體網格: List of Lists storing SCDM_HardwareSimple
         self.tiles: List[List[Hardware]] = []
+
+        self.weight_stats: Dict[str, int] = dict()
         
         # 執行切割與燒錄
         self._tiling_and_program(full_matrix)
@@ -53,6 +64,12 @@ class VirtualMatrix():
         
         # 使用 0 填充 (不影響運算結果)
         padded_matrix = np.pad(matrix, ((0, pad_r), (0, pad_c)), mode='constant', constant_values=0)
+
+        self.weight_stats = {
+            self.STATISTIC_WEIGHT_NEG1_KEY: int(np.sum(padded_matrix == -1)), 
+            self.STATISTIC_WEIGHT_0_KEY:    int(np.sum(padded_matrix == 0)), 
+            self.STATISTIC_WEIGHT_1_KEY:    int(np.sum(padded_matrix == 1))
+        }
         
         for r in range(self.grid_rows):
             row_tiles = []
@@ -76,20 +93,25 @@ class VirtualMatrix():
         self.logger.info(f"Created VirtualMatrix: {self.orig_rows}x{self.orig_cols} "
                          f"mapped to {self.grid_rows}x{self.grid_cols} tiles.")
 
-    # TODO 統計數據
-
-    def compute(self, input_vector: np.ndarray, mode: str, bit_depth: int = 8) -> np.ndarray:
+    def compute(self, input_vector: np.ndarray, mode: str, bit_depth: int = 8) -> Tuple[np.ndarray, Dict]:
         """
         執行分塊運算並組合結果。
         
         Returns:
             np.ndarray: Raw Sum (未經 Activation 的整數累加值)
+            dict
         """
         # 1. Pad Input Vector
         pad_len = self.grid_rows * self.hw_rows - len(input_vector)
         if pad_len < 0:
              raise ValueError("Input vector too large for programmed matrix")
         padded_input = np.pad(input_vector, (0, pad_len), mode='constant', constant_values=0)
+
+        input_stats = {
+            self.STATISTIC_INPUT_NEG_KEY: int(np.sum(padded_input <= -1)) * self.grid_cols, 
+            self.STATISTIC_INPUT_0_KEY:   int(np.sum(padded_input == 0)) * self.grid_cols, 
+            self.STATISTIC_INPUT_POS_KEY: int(np.sum(padded_input >= 1)) * self.grid_cols
+        }
         
         # 準備輸出緩衝區 (累加 Partial Sums 用，使用 int32 防止溢位)
         output_buffer = np.zeros(self.grid_cols * self.hw_cols, dtype=int)
@@ -121,4 +143,4 @@ class VirtualMatrix():
         # 3. 裁切掉 Padding 的輸出，直接回傳 Raw Sum
         final_output = output_buffer[:self.orig_cols]
             
-        return final_output
+        return final_output, input_stats

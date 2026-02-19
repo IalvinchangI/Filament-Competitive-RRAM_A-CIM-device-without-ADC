@@ -1,5 +1,6 @@
 import numpy as np
 import uuid
+from copy import deepcopy
 from typing import List, Union, Dict
 from utils import LoggingColor
 from SCDM_Driver import SCDM_DriverInterface
@@ -26,7 +27,9 @@ class SCDM_Simulator(SCDM_DriverInterface):
         self.hw_cols = hw_cols
         
         # Structure: { id_str: VirtualMatrixObject }
-        self.virtual_matrices: Dict[str, VirtualMatrix] = {}
+        self.virtual_matrices: Dict[str, VirtualMatrix] = dict()
+        # Structure: { id_str: per_id_stat_dict }
+        self.per_id_stats: Dict[str, dict] = dict()
         
         self._init_stats()
         
@@ -52,8 +55,29 @@ class SCDM_Simulator(SCDM_DriverInterface):
             
             # --- 資源狀態 ---
             "active_tiles": current_active, # 當前佔用的硬體 Tile 總數
-            "total_tiles_created": 0        # 歷史總共創建過的 Tile 數
+            "total_tiles_created": 0,       # 歷史總共創建過的 Tile 數
+
+            # --- 資料分佈統計 (Data Distribution) 用於能耗 ---
+            "total_programmed_weight_neg1": 0, 
+            "total_programmed_weight_0": 0, 
+            "total_programmed_weight_1": 0, 
+            
+            "total_computed_input_neg": 0, 
+            "total_computed_input_0": 0, 
+            "total_computed_input_pos": 0, 
         }
+
+        # 若是 Reset，也需要將個別 ID 裡面的「動態操作數據」歸零，
+        # 但必須保留靜態的權重分佈與 Tile 資源數量。
+        if hasattr(self, 'per_id_stats'):
+            for gid, stat in self.per_id_stats.items():
+                stat["logical_binary_ops"] = 0
+                stat["logical_multibit_ops"] = 0
+                stat["physical_binary_ops"] = 0
+                stat["physical_multibit_ops"] = 0
+                stat["computed_input_neg"] = 0
+                stat["computed_input_0"] = 0
+                stat["computed_input_pos"] = 0
 
     def submit_matrix(self, matrixes: List[np.ndarray]) -> str:
         """
@@ -73,12 +97,28 @@ class SCDM_Simulator(SCDM_DriverInterface):
         # 創建虛擬矩陣 (負責切割與分配硬體)
         v_matrix = VirtualMatrix(target_matrix, self.hw_rows, self.hw_cols)
         
-        # 更新統計數據
+        # 更新全域統計數據
         self.stats["logical_program_count"] += 1
         self.stats["physical_tiles_programmed"] += v_matrix.total_tiles
         self.stats["active_tiles"] += v_matrix.total_tiles
         self.stats["total_tiles_created"] += v_matrix.total_tiles
+        self.stats["total_programmed_weight_neg1"] += v_matrix.weight_stats[VirtualMatrix.STATISTIC_WEIGHT_neg1_KEY]
+        self.stats["total_programmed_weight_0"] += v_matrix.weight_stats[VirtualMatrix.STATISTIC_WEIGHT_0_KEY]
+        self.stats["total_programmed_weight_1"] += v_matrix.weight_stats[VirtualMatrix.STATISTIC_WEIGHT_1_KEY]
         
+        self.per_id_stats[group_id] = {
+            "original_shape": [v_matrix.orig_rows, v_matrix.orig_cols], 
+            "physical_tiles": v_matrix.total_tiles, 
+            "weight_stats": v_matrix.weight_stats.copy(), 
+            "logical_binary_ops": 0, 
+            "logical_multibit_ops": 0, 
+            "physical_binary_ops": 0, 
+            "physical_multibit_ops": 0, 
+            "computed_input_neg": 0, 
+            "computed_input_0": 0, 
+            "computed_input_pos": 0, 
+        }
+
         self.virtual_matrices[group_id] = v_matrix
         
         self.logger.info(f"Matrix Submitted. ID: {group_id}, Tiles Used: {v_matrix.total_tiles}")
@@ -88,6 +128,10 @@ class SCDM_Simulator(SCDM_DriverInterface):
         if id in self.virtual_matrices:
             v_matrix = self.virtual_matrices.pop(id)
             self.stats["active_tiles"] -= v_matrix.total_tiles
+            
+            if id in self.per_id_stats:
+                del self.per_id_stats[id]
+                
             self.logger.info(f"Matrix {id} cleared. Resources freed.")
             return True
         else:
@@ -97,6 +141,7 @@ class SCDM_Simulator(SCDM_DriverInterface):
     def clear_all_matrix(self) -> bool:
         cleared_count = len(self.virtual_matrices)
         self.virtual_matrices.clear()
+        self.per_id_stats.clear()
         self.stats["active_tiles"] = 0
         self.logger.info(f"All matrices cleared ({cleared_count} groups).")
         return True
@@ -109,6 +154,7 @@ class SCDM_Simulator(SCDM_DriverInterface):
             raise ValueError(f"Matrix ID {id} not found.")
         
         v_matrix = self.virtual_matrices[id]
+        id_stat = self.per_id_stats[id] 
         
         # 1. 儲存原始形狀與特徵維度
         original_shape = input_data.shape
@@ -129,15 +175,29 @@ class SCDM_Simulator(SCDM_DriverInterface):
             vector = flat_input[i] # 這是嚴格的 1D Array
             
             # 呼叫 VirtualMatrix (它現在只吃 1D)
-            flat_output[i] = v_matrix.compute(vector, mode=mode, bit_depth=bit_depth)
+            flat_output[i], in_stats = v_matrix.compute(vector, mode=mode, bit_depth=bit_depth)
             
-            # 更新統計 (以向量為單位)
+            # 更新統計：同步加到 全域 (self.stats) 與 個別 ID (id_stat)
             if mode == VirtualMatrix.MODE_BINARY:
                 self.stats["logical_binary_ops"] += 1
                 self.stats["physical_binary_ops"] += v_matrix.total_tiles
+                
+                id_stat["logical_binary_ops"] += 1
+                id_stat["physical_binary_ops"] += v_matrix.total_tiles
             else:
                 self.stats["logical_multibit_ops"] += 1
                 self.stats["physical_multibit_ops"] += v_matrix.total_tiles
+                
+                id_stat["logical_multibit_ops"] += 1
+                id_stat["physical_multibit_ops"] += v_matrix.total_tiles
+                
+            self.stats["total_computed_input_neg"] += in_stats[VirtualMatrix.STATISTIC_INPUT_NEG_KEY]
+            self.stats["total_computed_input_0"] += in_stats[VirtualMatrix.STATISTIC_INPUT_0_KEY]
+            self.stats["total_computed_input_pos"] += in_stats[VirtualMatrix.STATISTIC_INPUT_POS_KEY]
+            
+            id_stat["computed_input_neg"] += in_stats[VirtualMatrix.STATISTIC_INPUT_NEG_KEY]
+            id_stat["computed_input_0"] += in_stats[VirtualMatrix.STATISTIC_INPUT_0_KEY]
+            id_stat["computed_input_pos"] += in_stats[VirtualMatrix.STATISTIC_INPUT_POS_KEY]
 
         # 5. 還原形狀 (Reshape) -> (Batch, Seq, Out_Features)
         final_output_shape = original_shape[:-1] + (v_matrix.orig_cols,)
@@ -157,9 +217,24 @@ class SCDM_Simulator(SCDM_DriverInterface):
         
         physical_* 數據可用於估算真實功耗:
         Total Energy ~= (physical_binary_ops * E_bin) + (physical_multibit_ops * E_multi)
+        
+        Args:
+            id (str 或 None): 若為 None，回傳模擬器的所有統計資料；若為 ""，回傳模擬器的全域統計；若為特定 ID，回傳該 ID 的專屬統計。
         """
-        # TODO 針對單一 ID 回傳統計
-        return self.stats
+        if id is None:
+            return {
+                "stats": deepcopy(self.stats), 
+                "per_id_stats": deepcopy(self.per_id_stats)
+            }
+
+        if id == "":
+            return self.stats
+        
+        if id not in self.per_id_stats:
+            self.logger.warning(f"Statistic for ID '{id}' not found.")
+            return {}
+            
+        return self.per_id_stats[id]
     
     def reset_statistic(self) -> bool:
         """
