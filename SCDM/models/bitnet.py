@@ -155,7 +155,7 @@ class BitLinear(nn.Linear):
         """
         if function is None:
             _logger.info(LoggingColor.color_text("[BitLinear] Mode Switch: Software Simulation (Default)", LoggingColor.GREEN))
-            cls._matmul = cls._default_matmul
+            cls._matmul = staticmethod(cls._default_matmul)
             return
         
         def hardware_adapter(x_quant, layer_instance):
@@ -164,7 +164,7 @@ class BitLinear(nn.Linear):
             return function(x_quant, layer_instance.layer_id)
 
         _logger.info(LoggingColor.color_text("[BitLinear] Mode Switch: Hardware Acceleration (Driver Mounted)", LoggingColor.GREEN))
-        cls._matmul = hardware_adapter
+        cls._matmul = staticmethod(hardware_adapter)
 
     def __init__(self, in_features, out_features, bias=False, sub_norm=None):
         """
