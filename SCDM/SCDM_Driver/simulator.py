@@ -21,7 +21,7 @@ class SCDM_Simulator(SCDM_DriverInterface):
     ===============================================
     """
 
-    def __init__(self, hw_rows=64, hw_cols=64):
+    def __init__(self, hw_rows=256, hw_cols=256):
         self.logger = LoggingColor.get_logger("SCDM_Simulator")
         self.hw_rows = hw_rows
         self.hw_cols = hw_cols
