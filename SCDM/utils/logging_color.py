@@ -11,6 +11,7 @@ class LoggingColor():
     RED = "\033[91m"
     YELLOW = "\033[93m"
     ORANGE = "\033[38;5;208m"  # Extended 256-color code for Orange
+    CYAN = "\033[36m"
     RESET = "\033[0m"          # Resets all attributes (color, bold, etc.)
     BOLD = "\033[1m"
 
