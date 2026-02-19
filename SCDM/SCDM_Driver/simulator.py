@@ -16,7 +16,7 @@ class SCDM_Simulator(SCDM_DriverInterface):
     通常是 (Out_Channels, In_Channels * Kernel_H * Kernel_W) 的形狀。
     Simulator 負責的是單純的矩陣乘法 (Matrix Multiplication)，
     im2col 或其他 Tensor 展開的操作應由上層處理完畢後傳入。
-    
+
     ===============================================
     """
 
@@ -100,36 +100,56 @@ class SCDM_Simulator(SCDM_DriverInterface):
         self.stats["active_tiles"] = 0
         self.logger.info(f"All matrices cleared ({cleared_count} groups).")
         return True
+    
+    def _execute_loop(self, id: str, input_data: np.ndarray, mode: str, bit_depth: int = 8) -> np.ndarray:
+        """
+        處理 Flatten -> Loop -> Reshape
+        """
+        if id not in self.virtual_matrices:
+            raise ValueError(f"Matrix ID {id} not found.")
+        
+        v_matrix = self.virtual_matrices[id]
+        
+        # 1. 儲存原始形狀與特徵維度
+        original_shape = input_data.shape
+        input_features = original_shape[-1]
+        
+        if input_features > v_matrix.orig_rows:
+            raise ValueError(f"Input features {input_features} > Matrix In_Features {v_matrix.orig_rows}")
+
+        # 2. 攤平輸入 (Flatten) -> (N, In_Features)
+        flat_input = input_data.reshape(-1, input_features)
+        total_vectors = flat_input.shape[0]
+        
+        # 3. 準備輸出緩衝區 (N, Out_Features)
+        flat_output = np.zeros((total_vectors, v_matrix.orig_cols), dtype=np.int32)
+        
+        # 4. 迴圈執行 (Vector by Vector)
+        for i in range(total_vectors):
+            vector = flat_input[i] # 這是嚴格的 1D Array
+            
+            # 呼叫 VirtualMatrix (它現在只吃 1D)
+            flat_output[i] = v_matrix.compute(vector, mode=mode, bit_depth=bit_depth)
+            
+            # 更新統計 (以向量為單位)
+            if mode == VirtualMatrix.MODE_BINARY:
+                self.stats["logical_binary_ops"] += 1
+                self.stats["physical_binary_ops"] += v_matrix.total_tiles
+            else:
+                self.stats["logical_multibit_ops"] += 1
+                self.stats["physical_multibit_ops"] += v_matrix.total_tiles
+
+        # 5. 還原形狀 (Reshape) -> (Batch, Seq, Out_Features)
+        final_output_shape = original_shape[:-1] + (v_matrix.orig_cols,)
+        return flat_output.reshape(final_output_shape)
 
     def compute_binary(self, id: str, input_vector: np.ndarray) -> np.ndarray:
-        """
-        執行二值運算。回傳 Raw Sum，不執行 Sign。
-        """
-        if id not in self.virtual_matrices:
-            raise ValueError(f"Matrix ID {id} not found.")
-        
-        v_matrix = self.virtual_matrices[id]
-        
-        # 統計
-        self.stats["logical_binary_ops"] += 1
-        self.stats["physical_binary_ops"] += v_matrix.total_tiles
-        
-        return v_matrix.compute(input_vector, mode=VirtualMatrix.MODE_BINARY)
+        # 轉發給內部 Loop 處理
+        return self._execute_loop(id, input_vector, mode=VirtualMatrix.MODE_BINARY)
 
     def compute_multibit(self, id: str, input_data: np.ndarray, bit_depth: int) -> np.ndarray:
-        """
-        執行多位元運算。回傳 Raw Sum。
-        """
-        if id not in self.virtual_matrices:
-            raise ValueError(f"Matrix ID {id} not found.")
-        
-        v_matrix = self.virtual_matrices[id]
-        
-        # 統計
-        self.stats["logical_multibit_ops"] += 1
-        self.stats["physical_multibit_ops"] += v_matrix.total_tiles
-        
-        return v_matrix.compute(input_data, mode=VirtualMatrix.MODE_MULTIBIT, bit_depth=bit_depth)
+        # 轉發給內部 Loop 處理
+        return self._execute_loop(id, input_data, mode=VirtualMatrix.MODE_MULTIBIT, bit_depth=bit_depth)
 
     def get_statistic(self, id: Union[str, None] = None) -> dict:
         """
