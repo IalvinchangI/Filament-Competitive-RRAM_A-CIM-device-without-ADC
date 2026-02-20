@@ -37,10 +37,19 @@ class SCDM_Simulator(SCDM_DriverInterface):
 
     def _init_stats(self):
         """初始化統計數據字典"""
-        # 保留當前 active 的 tile 數量，避免 reset 時狀態不一致
+        # 保留當前靜態狀態 (active tiles 與已燒錄的權重分佈)，避免 reset 時狀態被清空
         current_active = 0
+        tiles_created = 0
+        w_neg1 = 0
+        w_0 = 0
+        w_1 = 0
+        
         if hasattr(self, 'stats'):
             current_active = self.stats.get("active_tiles", 0)
+            tiles_created = self.stats.get("total_tiles_created", 0)
+            w_neg1 = self.stats.get("total_programmed_weight_neg1", 0)
+            w_0 = self.stats.get("total_programmed_weight_0", 0)
+            w_1 = self.stats.get("total_programmed_weight_1", 0)
 
         self.stats = {
             # --- 邏輯層 (Logical) 統計 ---
@@ -54,14 +63,16 @@ class SCDM_Simulator(SCDM_DriverInterface):
             "physical_multibit_ops": 0,     # 實際硬體執行 multibit 的總次數 (logical * tiles)
             
             # --- 資源狀態 ---
-            "active_tiles": current_active, # 當前佔用的硬體 Tile 總數
-            "total_tiles_created": 0,       # 歷史總共創建過的 Tile 數
+            "active_tiles": current_active,       # 當前佔用的硬體 Tile 總數
+            "total_tiles_created": tiles_created, # 歷史總共創建過的 Tile 數
 
-            # --- 資料分佈統計 (Data Distribution) 用於能耗 ---
-            "total_programmed_weight_neg1": 0, 
-            "total_programmed_weight_0": 0, 
-            "total_programmed_weight_1": 0, 
+            # --- 資料分佈統計 ---
+            # 權重是靜態的，保留
+            "total_programmed_weight_neg1": w_neg1, 
+            "total_programmed_weight_0": w_0, 
+            "total_programmed_weight_1": w_1, 
             
+            # Input 是動態的，每次 Run 清零
             "total_computed_input_neg": 0, 
             "total_computed_input_0": 0, 
             "total_computed_input_pos": 0, 
@@ -78,6 +89,7 @@ class SCDM_Simulator(SCDM_DriverInterface):
                 stat["computed_input_neg"] = 0
                 stat["computed_input_0"] = 0
                 stat["computed_input_pos"] = 0
+                # 注意：這裡沒有清空 stat["weight_stats"]，因為個別層的權重也是靜態的
 
     def submit_matrix(self, matrixes: List[np.ndarray]) -> str:
         """
@@ -127,7 +139,12 @@ class SCDM_Simulator(SCDM_DriverInterface):
     def clear_matrix(self, id: str) -> bool:
         if id in self.virtual_matrices:
             v_matrix = self.virtual_matrices.pop(id)
+            
+            # [修正] 釋放資源時，同時扣除 Tiles 與全域權重統計
             self.stats["active_tiles"] -= v_matrix.total_tiles
+            self.stats["total_programmed_weight_neg1"] -= v_matrix.weight_stats[VirtualMatrix.STATISTIC_WEIGHT_NEG1_KEY]
+            self.stats["total_programmed_weight_0"] -= v_matrix.weight_stats[VirtualMatrix.STATISTIC_WEIGHT_0_KEY]
+            self.stats["total_programmed_weight_1"] -= v_matrix.weight_stats[VirtualMatrix.STATISTIC_WEIGHT_1_KEY]
             
             if id in self.per_id_stats:
                 del self.per_id_stats[id]
@@ -142,7 +159,13 @@ class SCDM_Simulator(SCDM_DriverInterface):
         cleared_count = len(self.virtual_matrices)
         self.virtual_matrices.clear()
         self.per_id_stats.clear()
+        
+        # 全部清空時，所有靜態資源歸零
         self.stats["active_tiles"] = 0
+        self.stats["total_programmed_weight_neg1"] = 0
+        self.stats["total_programmed_weight_0"] = 0
+        self.stats["total_programmed_weight_1"] = 0
+        
         self.logger.info(f"All matrices cleared ({cleared_count} groups).")
         return True
     
@@ -172,9 +195,8 @@ class SCDM_Simulator(SCDM_DriverInterface):
         
         # 4. 迴圈執行 (Vector by Vector)
         for i in range(total_vectors):
-            vector = flat_input[i] # 這是嚴格的 1D Array
+            vector = flat_input[i]
             
-            # 呼叫 VirtualMatrix (它現在只吃 1D)
             flat_output[i], in_stats = v_matrix.compute(vector, mode=mode, bit_depth=bit_depth)
             
             # 更新統計：同步加到 全域 (self.stats) 與 個別 ID (id_stat)
@@ -238,15 +260,8 @@ class SCDM_Simulator(SCDM_DriverInterface):
     
     def reset_statistic(self) -> bool:
         """
-        重置累計統計數據 (Ops, Program Count)，但保留當前硬體佔用狀態。
+        重置累計統計數據 (Ops, Input), 但保留當前硬體佔用狀態與權重分佈。
         """
         self.logger.info("Statistics Reset")
-        
-        # 保留當前 active tiles 數值
-        current_active = self.stats["active_tiles"]
-        
         self._init_stats()
-        
-        # 恢復 active tiles
-        self.stats["active_tiles"] = current_active
         return True
