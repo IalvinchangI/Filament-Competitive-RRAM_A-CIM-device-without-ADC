@@ -38,3 +38,6 @@ class BasicModelLoader():
         TODO
         """
         pass
+
+    def loader_details(self):
+        raise NotImplementedError

@@ -40,17 +40,21 @@ class ModelExecutor():
         config model loader
         submit matrixes into driver
         """
-        if self._driver is None:
-            raise RuntimeError("Driver has not been configured. Please call config_driver() first.")
-        
         # 如果已經有載入的 loader，先進行卸載以釋放資源
         if self._current_loader is not None:
             self.unload()
         self._current_loader = model_loader
         
-        self._logger.info(f"Configuring loader: {model_loader.__class__.__name__}...")
-        # 關鍵步驟：呼叫 Loader 的 config，這通常會觸發權重寫入 (driver.submit_matrix)
-        self._current_loader.config(self._driver)
+        if self._driver is None:
+            self._logger.warning(LoggingColor.color_text(
+                "Driver has not been configured. Please call config_driver() first. " + 
+                "The non-simulation version of TernaryBitNet will be used.", 
+                LoggingColor.WARNING
+            ))
+        else:
+            self._logger.info(f"Configuring loader: {model_loader.__class__.__name__}...")
+            # 關鍵步驟：呼叫 Loader 的 config，這通常會觸發權重寫入 (driver.submit_matrix)
+            self._current_loader.config(self._driver)
 
     def unload(self):
         """
@@ -76,10 +80,6 @@ class ModelExecutor():
         # 2. 轉發給 Loader 執行
         result = self._current_loader.run(input_data, input_command)
 
-        # 3. 紀錄結束時間並計算花費時間
-        end_time = time.time()
-        duration = end_time - start_time
-
         # 4. 收集執行資訊與統計數據
         driver_name = self._driver.__class__.__name__ if self._driver else "None"
         loader_name = self._current_loader.__class__.__name__
@@ -91,29 +91,57 @@ class ModelExecutor():
             "dtype": str(input_data.dtype) if hasattr(input_data, "dtype") else None
         }
 
-        run_stats = {}
-        if self._driver is not None:
-            # 取得該次 run 期間累積的數據
-            run_stats = self._driver.get_statistic()
-            # 刷新歸零，準備下一次 run
-            self._driver.reset_statistic()
-
         # 5. 將紀錄打包並存入歷史串列
         record = {
             "timestamp": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(start_time)),
             "loader": loader_name, 
+            "loader_info": self._current_loader.loader_details(), 
             "driver": driver_name, 
             "input_command": input_command, 
             "input_data_info": input_info, 
-            "duration_seconds": round(duration, 4), 
-            "driver_statistics": run_stats, 
-            "_raw_input_data": input_data
+            "duration_seconds": 0, 
+            "driver_statistics": {}, 
+            "_raw_input_data": input_data, 
+            "_raw_output_data": result
         }
+
+        if hasattr(result, "register_on_finish_callback") and callable(result.register_on_finish_callback):
+            def on_finish_handler():
+                # 這個 block 會在串流全部印完時才被執行
+                end_time = time.time()
+                record["duration_seconds"] = round(end_time - start_time, 4)
+                if self._driver is not None:
+                    # 抓取並清空剛才背景跑出來的硬體數據
+                    record["driver_statistics"] = self._driver.get_statistic()
+                    self._driver.reset_statistic()
+                
+                self._logger.info(LoggingColor.color_text(f"Stream finished in {record['duration_seconds']:.4f}s. Stats recorded.", LoggingColor.CYAN))
+
+            # 註冊給 Tracker
+            result.register_on_finish_callback(on_finish_handler)
+            self._logger.info(LoggingColor.color_text("Stream generation started in background...", LoggingColor.CYAN))
+        
+        else:
+            end_time = time.time()
+            record["duration_seconds"] = round(end_time - start_time, 4)
+            if self._driver is not None:
+                record["driver_statistics"] = self._driver.get_statistic()
+                self._driver.reset_statistic()
+            self._logger.info(LoggingColor.color_text(f"Run completed in {record['duration_seconds']:.4f}s. Record saved internally.", LoggingColor.CYAN))
         
         self._history.append(record)
-        self._logger.info(LoggingColor.color_text(f"Run completed in {duration:.4f}s. Record saved internally.", LoggingColor.CYAN))
-
         return result
+
+    def __save_vector(self, dir_path: Path, pickle_filename: str, raw_input_data) -> str:
+        """ return pickle filename """
+        pickle_filepath = dir_path / pickle_filename
+        try:
+            with open(pickle_filepath, 'wb') as pf:
+                pickle.dump(raw_input_data, pf)
+            return pickle_filename
+        except Exception as e:
+            self._logger.error(LoggingColor.color_text(f"Error saving pickle in {dir_path}: {e}", LoggingColor.ERROR))
+            return None
 
     def save_info(self, prefix: str = None):
         """
@@ -139,17 +167,14 @@ class ModelExecutor():
             rec_copy = record.copy()
             
             # 抽出 raw data
-            raw_input_data = rec_copy.pop("_raw_input_data", None)
+            raw_input_data  = rec_copy.pop("_raw_input_data", None)
+            raw_output_data = rec_copy.pop("_raw_output_data", None)
+            if hasattr(raw_output_data, "get_full_result") and callable(raw_output_data.get_full_result):
+                raw_output_data = raw_output_data.get_full_result()
             
-            # 2. 儲存 Pickle (只存 input_data)
-            pickle_filepath = dir_path / "input.pickle"
-            try:
-                with open(pickle_filepath, 'wb') as pf:
-                    pickle.dump(raw_input_data, pf)
-                rec_copy["input_pickle_file"] = "input.pickle"
-            except Exception as e:
-                self._logger.error(LoggingColor.color_text(f"Error saving pickle in {run_folder_name}: {e}", LoggingColor.ERROR))
-                rec_copy["input_pickle_file"] = "ERROR_SAVING_PICKLE"
+            # 2. 儲存 Pickle
+            rec_copy["input_pickle_file"]  = self.__save_vector(dir_path, "input.pickle",  raw_input_data)
+            rec_copy["output_pickle_file"] = self.__save_vector(dir_path, "output.pickle", raw_output_data)
 
             # 3. 儲存 JSON (包含此次執行所有的 log 與統計)
             json_filepath = dir_path / "log.json"
@@ -164,8 +189,10 @@ class ModelExecutor():
 
     def clear_info_cache(self):
         """
-        reset statistic data in the driver
+        reset statistic data in the driver & records in the executor
         """
         if self._driver is not None:
             self._driver.reset_statistic()
             self._logger.info(LoggingColor.color_text("Driver statistics have been reset.", LoggingColor.GREEN))
+        self._history.clear()
+        self._logger.info(LoggingColor.color_text("Executor records have been reset.", LoggingColor.GREEN))

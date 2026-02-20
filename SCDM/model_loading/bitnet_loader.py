@@ -249,7 +249,7 @@ class TernaryBitNetLoader(BasicModelLoader):
 
                 # 5. 直接回傳 Streamer (Generator)
                 # 外部可以用 `for text in result: print(text)` 來接收
-                return streamer
+                return TextStreamTracker(streamer)
 
             else:
                 self._logger.warning(LoggingColor.color_text(f"⚠️ Unknown command: {input_command}", LoggingColor.WARNING))
@@ -278,3 +278,40 @@ class TernaryBitNetLoader(BasicModelLoader):
 
         BitLinear.set_matmul(None) 
         self._logger.info(f"✅ Cleared {count} matrices from hardware.")
+
+    def loader_details(self):
+        return {
+            "bit_depth": self.BIT_DEPTH, 
+            "fix_output_generation": self.FIX_OUTPUT_GENERATION, 
+            "max_token": self.MAX_TOKEN
+        }
+
+
+
+class TextStreamTracker:
+    """
+    用來包裝 TextIteratorStreamer。
+    當前端 (main.py) 用 for 迴圈讀取並印出字串時，
+    它會偷偷在背景把完整的句子存起來，供後續 Executor 存檔。
+    """
+    def __init__(self, streamer):
+        self.streamer = streamer
+        self._accumulated_text = ""
+        self._on_finish_callback = None
+    
+    def register_on_finish_callback(self, callback):
+        """允許外部註冊一個在串流結束時觸發的函式"""
+        self._on_finish_callback = callback
+        
+    def __iter__(self):
+        try:
+            for chunk in self.streamer:
+                if isinstance(chunk, str):
+                    self._accumulated_text += chunk
+                yield chunk
+        finally:
+            if self._on_finish_callback is not None:
+                self._on_finish_callback()
+            
+    def get_full_result(self) -> str:
+        return self._accumulated_text
