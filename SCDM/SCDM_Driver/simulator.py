@@ -21,10 +21,11 @@ class SCDM_Simulator(SCDM_DriverInterface):
     ===============================================
     """
 
-    def __init__(self, hw_rows=256, hw_cols=256):
+    def __init__(self, hw_rows=256, hw_cols=256, ideal_TF: bool = False):
         self.logger = LoggingColor.get_logger("SCDM_Simulator")
         self.hw_rows = hw_rows
         self.hw_cols = hw_cols
+        self.ideal_TF = ideal_TF
         
         # Structure: { id_str: VirtualMatrixObject }
         self.virtual_matrices: Dict[str, VirtualMatrix] = dict()

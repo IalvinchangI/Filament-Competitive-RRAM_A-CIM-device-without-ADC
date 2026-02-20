@@ -23,7 +23,7 @@ class SCDM_HardwareSimple(SCDM_HardwareInterface):
     # 初始化 Logger
     _logger = LoggingColor.get_logger("SCDM_HardwareSimple")
 
-    def __init__(self, rows=256, cols=256, analog_scaling=0.15, noise_std=0.08, ocsa_threshold=0.2):
+    def __init__(self, rows=256, cols=256, ideal_TF: bool = False, analog_scaling=0.15, noise_std=0.08, ocsa_threshold=0.2):
         """
         初始化硬體參數。
         此處的預設參數已針對 256x256 陣列重新校準，

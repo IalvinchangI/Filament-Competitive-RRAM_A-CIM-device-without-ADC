@@ -32,7 +32,7 @@ class VirtualMatrix():
     STATISTIC_INPUT_0_KEY     = "input_0"
     STATISTIC_INPUT_POS_KEY   = "input_pos"
 
-    def __init__(self, full_matrix: np.ndarray, hw_rows: int, hw_cols: int, silent_hardware: bool = True):
+    def __init__(self, full_matrix: np.ndarray, hw_rows: int, hw_cols: int, ideal_TF: bool = False, silent_hardware: bool = True):
         self.logger = LoggingColor.get_logger("VirtualMatrix")
         if silent_hardware:
             Hardware._logger.setLevel(logging.WARNING)
@@ -40,6 +40,7 @@ class VirtualMatrix():
         self.orig_rows, self.orig_cols = full_matrix.shape
         self.hw_rows = hw_rows
         self.hw_cols = hw_cols
+        self.ideal_TF = ideal_TF
         
         # 計算 Grid 大小 (無條件進位)
         self.grid_rows = math.ceil(self.orig_rows / hw_rows)
@@ -75,7 +76,7 @@ class VirtualMatrix():
             row_tiles = []
             for c in range(self.grid_cols):
                 # 1. 實例化硬體
-                hw = Hardware(rows=self.hw_rows, cols=self.hw_cols)
+                hw = Hardware(rows=self.hw_rows, cols=self.hw_cols, ideal_TF=self.ideal_TF)
                 
                 # 2. 切割子矩陣
                 r_start = r * self.hw_rows
