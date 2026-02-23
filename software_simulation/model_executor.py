@@ -28,7 +28,7 @@ class ModelExecutor():
     LOG_DIR = Path(os.getcwd()).resolve() / "data" / "logs"
     DEFAULT_LOG_PREFIX = "ME"
     
-    _logger = LoggingColor.get_logger("executor")
+    _logger = LoggingColor.get_logger("ModelExecutor")
 
     def __init__(self):
         self._current_loader: BasicModelLoader = None
