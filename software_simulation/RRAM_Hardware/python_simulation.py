@@ -1,11 +1,11 @@
 import numpy as np
-from SCDM_Hardware import SCDM_HardwareInterface
-from SCDM_Hardware.hardware_primitive import SCDM_HardwarePrimitive
+from RRAM_Hardware import RRAM_HardwareInterface
+from RRAM_Hardware.hardware_primitive import RRAM_HardwarePrimitive
 from utils import LoggingColor
 
-class SCDM_HardwarePythonSim(SCDM_HardwareInterface):
+class RRAM_HardwarePythonSim(RRAM_HardwareInterface):
     """
-    SCDM (Stochastic Computing / Digital Matrix) Hardware Python Simulation
+    Filament Competitive RRAM Hardware Python Simulation
     
     這是一個通用的存算一體矩陣運算加速器封裝層。
     它嚴格遵守硬體定義的介面操作，將底層的類比物理行為 (電壓、電流、時間) 
@@ -13,14 +13,14 @@ class SCDM_HardwarePythonSim(SCDM_HardwareInterface):
     """
     
     # 初始化 Logger
-    _logger = LoggingColor.get_logger("SCDM_HardwarePythonSim")
+    _logger = LoggingColor.get_logger("RRAM_HardwarePythonSim")
 
     def __init__(self, rows=64, cols=64):
         self.rows = rows
         self.cols = cols
 
         # 1. 初始化底層物理核心
-        self.phy = SCDM_HardwarePrimitive(rows, cols)
+        self.phy = RRAM_HardwarePrimitive(rows, cols)
         
         # 2. 影子暫存器 (Shadow Register)
         # 用於記錄當前陣列中的邏輯權重，以便在校正流程(Calibration)後恢復狀態。
@@ -37,7 +37,7 @@ class SCDM_HardwarePythonSim(SCDM_HardwareInterface):
         # 5. 系統啟動校正 (System Startup Calibration)
         self._logger.info(LoggingColor.color_text(f"System Startup: Initializing ({self.rows}x{self.cols})...", LoggingColor.BOLD))
         self._perform_calibration()
-        self._logger.info(LoggingColor.color_text("SCDM_HardwarePythonSim Ready.", LoggingColor.GREEN))
+        self._logger.info(LoggingColor.color_text("RRAM_HardwarePythonSim Ready.", LoggingColor.GREEN))
 
     def _perform_calibration(self):
         """ [內部程序] 系統校正：建立時間與強度的轉換係數 K """

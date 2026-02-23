@@ -1,4 +1,4 @@
-from SCDM_Driver import SCDM_DriverInterface
+from RRAM_Driver import RRAM_DriverInterface
 from model_loading import BasicModelLoader
 import numpy
 import json
@@ -26,10 +26,10 @@ class ModelExecutor():
 
     def __init__(self):
         self._current_loader: BasicModelLoader = None
-        self._driver: SCDM_DriverInterface = None
+        self._driver: RRAM_DriverInterface = None
         self._history = list()
 
-    def config_driver(self, driver: SCDM_DriverInterface):
+    def config_driver(self, driver: RRAM_DriverInterface):
         """
         config all the things related to driver
         """

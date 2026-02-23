@@ -2,12 +2,12 @@ import os
 from model_export import ModelImportHandler
 
 from model_executor import ModelExecutor
-from SCDM_Driver import SCDM_Simulator
+from RRAM_Driver import RRAM_Simulator
 from model_loading import TernaryBitNetLoader
 
 
 def main():
-    print("🚀 SCDM Simulator 啟動流程開始...")
+    print("🚀 Filament Competitive RRAM Simulator 啟動流程開始...")
 
     # 請將這裡替換成你真實的 BitNet 模型權重路徑
     MODEL_PATH = ModelImportHandler.MODEL_DEFAULT_DIR / "NLP_BitNet_2B4T_TNN.pickle"
@@ -23,7 +23,7 @@ def main():
     # ==========================================
     # 2. create Driver
     # ==========================================
-    driver = SCDM_Simulator()
+    driver = RRAM_Simulator()
 
     # ==========================================
     # 3. put driver into Executor

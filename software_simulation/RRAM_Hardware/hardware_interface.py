@@ -1,9 +1,9 @@
 import numpy
 
-class SCDM_HardwareInterface():
+class RRAM_HardwareInterface():
     """
-    SCDM 硬體抽象層介面 (Hardware Abstraction Layer Interface)
-    定義所有 SCDM 實作 (Simulation / FPGA / ASIC) 必須遵守的標準 API。
+    Filament Competitive RRAM 硬體抽象層介面 (Hardware Abstraction Layer Interface)
+    定義所有 Filament Competitive RRAM 實作 (Simulation / FPGA / ASIC) 必須遵守的標準 API。
     """
 
     # =====================================================================

@@ -1,7 +1,7 @@
 import numpy
 from typing import List, Union, Dict
 
-class SCDM_DriverInterface():
+class RRAM_DriverInterface():
     """
     SCDM Driver Interface
     ===========================================================================

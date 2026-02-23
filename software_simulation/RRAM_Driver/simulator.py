@@ -3,12 +3,12 @@ import uuid
 from copy import deepcopy
 from typing import List, Union, Dict
 from utils import LoggingColor
-from SCDM_Driver import SCDM_DriverInterface
-from SCDM_Driver._virtual_matrix import VirtualMatrix
+from RRAM_Driver import RRAM_DriverInterface
+from RRAM_Driver._virtual_matrix import VirtualMatrix
 
-class SCDM_Simulator(SCDM_DriverInterface):
+class RRAM_Simulator(RRAM_DriverInterface):
     """
-    SCDM_Simulator
+    RRAM_Simulator
     ===============================================
     負責管理多個 VirtualMatrix 實例。
     
@@ -22,7 +22,7 @@ class SCDM_Simulator(SCDM_DriverInterface):
     """
 
     def __init__(self, hw_rows=256, hw_cols=256, ideal_TF: bool = False):
-        self.logger = LoggingColor.get_logger("SCDM_Simulator")
+        self.logger = LoggingColor.get_logger("RRAM_Simulator")
         self.hw_rows = hw_rows
         self.hw_cols = hw_cols
         self.ideal_TF = ideal_TF

@@ -1,7 +1,7 @@
 import math
 import numpy as np
 from typing import List, Tuple, Dict
-from SCDM_Hardware import SCDM_HardwareSimple as Hardware
+from RRAM_Hardware import RRAM_HardwareSimple as Hardware
 from utils import LoggingColor
 import logging
 

@@ -1,7 +1,7 @@
 """
-SCDM_HardwareSimple.py
+simple.py
 ===========================================================================
-SCDM 帶類比特徵之邏輯模擬器 (Analog-Aware Behavioral Model)
+Filament Competitive RRAM 帶類比特徵之邏輯模擬器 (Analog-Aware Behavioral Model)
 版本: v4.1 (ADC-less Unsigned Zero-Point Quantization Logic)
 
 [邏輯修正與升級]
@@ -13,16 +13,16 @@ Wordline 僅驅動 0 或 1，將輸入激勵值映射為無號數 (0~255)，所�
 """
 
 import numpy as np
-from SCDM_Hardware import SCDM_HardwareInterface
+from RRAM_Hardware import RRAM_HardwareInterface
 from utils import LoggingColor
 
-class SCDM_HardwareSimple(SCDM_HardwareInterface):
+class RRAM_HardwareSimple(RRAM_HardwareInterface):
     """
-    SCDM 類比感知邏輯模擬器 (針對 256x256 陣列優化)
+    Filament Competitive RRAM 類比感知邏輯模擬器 (針對 256x256 陣列優化)
     """
 
     # 初始化 Logger
-    _logger = LoggingColor.get_logger("SCDM_HardwareSimple")
+    _logger = LoggingColor.get_logger("RRAM_HardwareSimple")
 
     def __init__(self, rows=256, cols=256, ideal_TF: bool = False, analog_scaling=0.15, noise_std=0.08, ocsa_threshold=0.2, hardware_scale=5.5):
         """
@@ -41,13 +41,13 @@ class SCDM_HardwareSimple(SCDM_HardwareInterface):
 
         self.hardware_scale = hardware_scale
         
-        self._logger.info(f"Initialized Analog-Aware SCDM_HardwareSimple ({rows}x{cols})")
+        self._logger.info(f"Initialized Analog-Aware RRAM_HardwareSimple ({rows}x{cols})")
 
     def reset_matrix(self):
         """
         [指令] 矩陣重置 (Matrix Reset)
         """
-        self._logger.info("[Simple] Reset Matrix")
+        self._logger.info("Reset Matrix")
         self.matrix.fill(0)
 
     def program_matrix(self, matrix_data):

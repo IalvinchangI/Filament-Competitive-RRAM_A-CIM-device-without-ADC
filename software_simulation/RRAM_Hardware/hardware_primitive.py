@@ -1,7 +1,7 @@
 """
-SCDM_HardwarePrimitive.py
+hardware_primitive.py
 ===========================================================================
-SCDM 存算一體晶片 - 真實物理層原語 (True Physics Primitives)
+Filament Competitive RRAM - 真實物理層原語 (True Physics Primitives)
 版本: v6.0 (Unsimplified Physics / Transient Dynamics)
 
 [物理模型說明]
@@ -20,7 +20,7 @@ SCDM 存算一體晶片 - 真實物理層原語 (True Physics Primitives)
 import numpy as np
 import logging
 
-class SCDM_HardwarePrimitive():
+class RRAM_HardwarePrimitive():
     def __init__(self, rows=64, cols=64):
         """
         初始化物理層參數 (基於 TSMC 28nm RRAM PDK 數據模型)。

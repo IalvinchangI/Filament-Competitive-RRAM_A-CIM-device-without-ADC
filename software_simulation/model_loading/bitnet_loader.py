@@ -12,7 +12,7 @@ from utils.environment_variables import HP_TOKEN, TORCH_DEVICE
 
 from torch import nn
 from typing import Union, Iterator
-from SCDM_Driver import SCDM_DriverInterface
+from RRAM_Driver import RRAM_DriverInterface
 
 
 class TernaryBitNetLoader(BasicModelLoader):
@@ -131,9 +131,9 @@ class TernaryBitNetLoader(BasicModelLoader):
             self.model = None
 
         # init driver
-        self.driver: SCDM_DriverInterface = None
+        self.driver: RRAM_DriverInterface = None
 
-    def config(self, driver: SCDM_DriverInterface):
+    def config(self, driver: RRAM_DriverInterface):
         """配置硬體加速"""
         super().config(driver)
         
