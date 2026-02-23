@@ -55,12 +55,10 @@ class SCDM_Simulator(SCDM_DriverInterface):
         self.stats = {
             # --- 邏輯層 (Logical) 統計 ---
             "logical_program_count": 0,    # submit 呼叫次數
-            "logical_binary_ops": 0,       # compute_binary 呼叫次數
             "logical_multibit_ops": 0,     # compute_multibit 呼叫次數
             
             # --- 物理層 (Physical) 統計 - 更精確的功耗評估用 ---
             "physical_tiles_programmed": 0, # 總共對多少個硬體 Tile 進行了寫入
-            "physical_binary_ops": 0,       # 實際硬體執行 binary 的總次數 (logical * tiles)
             "physical_multibit_ops": 0,     # 實際硬體執行 multibit 的總次數 (logical * tiles)
             
             # --- 資源狀態 ---
@@ -83,9 +81,7 @@ class SCDM_Simulator(SCDM_DriverInterface):
         # 但必須保留靜態的權重分佈與 Tile 資源數量。
         if hasattr(self, 'per_id_stats'):
             for gid, stat in self.per_id_stats.items():
-                stat["logical_binary_ops"] = 0
                 stat["logical_multibit_ops"] = 0
-                stat["physical_binary_ops"] = 0
                 stat["physical_multibit_ops"] = 0
                 stat["computed_input_neg"] = 0
                 stat["computed_input_0"] = 0
@@ -123,9 +119,7 @@ class SCDM_Simulator(SCDM_DriverInterface):
             "original_shape": [v_matrix.orig_rows, v_matrix.orig_cols], 
             "physical_tiles": v_matrix.total_tiles, 
             "weight_stats": v_matrix.weight_stats.copy(), 
-            "logical_binary_ops": 0, 
             "logical_multibit_ops": 0, 
-            "physical_binary_ops": 0, 
             "physical_multibit_ops": 0, 
             "computed_input_neg": 0, 
             "computed_input_0": 0, 
@@ -169,11 +163,8 @@ class SCDM_Simulator(SCDM_DriverInterface):
         
         self.logger.info(f"All matrices cleared ({cleared_count} groups).")
         return True
-    
-    def _execute_loop(self, id: str, input_data: np.ndarray, mode: str, bit_depth: int = 8) -> np.ndarray:
-        """
-        處理 Flatten -> Loop -> Reshape
-        """
+
+    def compute_multibit(self, id: str, input_data: np.ndarray, bit_depth: int) -> np.ndarray:
         if id not in self.virtual_matrices:
             raise ValueError(f"Matrix ID {id} not found.")
         
@@ -198,21 +189,14 @@ class SCDM_Simulator(SCDM_DriverInterface):
         for i in range(total_vectors):
             vector = flat_input[i]
             
-            flat_output[i], in_stats = v_matrix.compute(vector, mode=mode, bit_depth=bit_depth)
+            flat_output[i], in_stats = v_matrix.compute(vector, mode=VirtualMatrix.MODE_MULTIBIT, bit_depth=bit_depth)
             
             # 更新統計：同步加到 全域 (self.stats) 與 個別 ID (id_stat)
-            if mode == VirtualMatrix.MODE_BINARY:
-                self.stats["logical_binary_ops"] += 1
-                self.stats["physical_binary_ops"] += v_matrix.total_tiles
-                
-                id_stat["logical_binary_ops"] += 1
-                id_stat["physical_binary_ops"] += v_matrix.total_tiles
-            else:
-                self.stats["logical_multibit_ops"] += 1
-                self.stats["physical_multibit_ops"] += v_matrix.total_tiles
-                
-                id_stat["logical_multibit_ops"] += 1
-                id_stat["physical_multibit_ops"] += v_matrix.total_tiles
+            self.stats["logical_multibit_ops"] += 1
+            self.stats["physical_multibit_ops"] += v_matrix.total_tiles
+            
+            id_stat["logical_multibit_ops"] += 1
+            id_stat["physical_multibit_ops"] += v_matrix.total_tiles
                 
             self.stats["total_computed_input_neg"] += in_stats[VirtualMatrix.STATISTIC_INPUT_NEG_KEY]
             self.stats["total_computed_input_0"] += in_stats[VirtualMatrix.STATISTIC_INPUT_0_KEY]
@@ -226,20 +210,11 @@ class SCDM_Simulator(SCDM_DriverInterface):
         final_output_shape = original_shape[:-1] + (v_matrix.orig_cols,)
         return flat_output.reshape(final_output_shape)
 
-    def compute_binary(self, id: str, input_vector: np.ndarray) -> np.ndarray:
-        # 轉發給內部 Loop 處理
-        return self._execute_loop(id, input_vector, mode=VirtualMatrix.MODE_BINARY)
-
-    def compute_multibit(self, id: str, input_data: np.ndarray, bit_depth: int) -> np.ndarray:
-        # 轉發給內部 Loop 處理
-        return self._execute_loop(id, input_data, mode=VirtualMatrix.MODE_MULTIBIT, bit_depth=bit_depth)
-
     def get_statistic(self, id: Union[str, None] = None) -> dict:
         """
         回傳詳細統計數據。
         
-        physical_* 數據可用於估算真實功耗:
-        Total Energy ~= (physical_binary_ops * E_bin) + (physical_multibit_ops * E_multi)
+        physical_* 數據可用於估算真實功耗
         
         Args:
             id (str 或 None): 若為 None，回傳模擬器的所有統計資料；若為 ""，回傳模擬器的全域統計；若為特定 ID，回傳該 ID 的專屬統計。

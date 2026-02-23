@@ -21,7 +21,6 @@ class VirtualMatrix():
     """
     
     # Mode Constants
-    MODE_BINARY = "binary"
     MODE_MULTIBIT = "multibit"
 
     # Statistic Key
@@ -128,11 +127,15 @@ class VirtualMatrix():
                 hw_tile = self.tiles[r][c]
                 
                 # 呼叫硬體並取得 Partial Sum
-                if mode == self.MODE_BINARY:
-                    # 硬體現在回傳的是 Raw Sum，直接累加即可
-                    tile_out = hw_tile.compute_binary(input_slice)
-                elif mode == self.MODE_MULTIBIT:
-                    tile_out = hw_tile.compute_multibit(input_slice, bit_depth=bit_depth)
+                if mode == self.MODE_MULTIBIT:
+                    input_slice_pos = np.zeros_like(input_slice, dtype=int)
+                    input_slice_neg = np.zeros_like(input_slice, dtype=int)
+                    input_slice_pos[input_slice >= 0] = input_slice[input_slice >= 0]
+                    input_slice_neg[input_slice < 0] = -(input_slice[input_slice < 0])
+
+                    tile_out_pos = hw_tile.compute_multibit(input_slice_pos, bit_depth=bit_depth)
+                    tile_out_neg = hw_tile.compute_multibit(input_slice_neg, bit_depth=bit_depth)
+                    tile_out = tile_out_pos - tile_out_neg
                 else:
                     raise ValueError(f"Unknown mode: {mode}")
                 

@@ -69,27 +69,6 @@ class SCDM_DriverInterface():
         """
         raise NotImplementedError()
     
-    def compute_binary(self, id: str, input_vector: numpy.ndarray) -> numpy.ndarray:
-        """
-        Perform a Binary Computation (XNOR/Popcount or similar) on the specified matrix group.
-
-        If the matrix was tiled across multiple hardware units, the driver is responsible for:
-        1. Broadcasting the input vector to relevant tiles.
-        2. Accumulating partial sums from multiple tiles.
-        3. Applying the final threshold function (Sign).
-
-        Args:
-            id (str): The Group ID to compute against.
-            input_vector (numpy.ndarray): The input activation vector.
-
-        Returns:
-            numpy.ndarray: The result vector (typically -1, 0, 1 for ternary/binary logic).
-
-        Records:
-            - Increments 'compute_binary_ops'.
-        """
-        raise NotImplementedError()
-    
     def compute_multibit(self, id: str, input_data: numpy.ndarray, bit_depth: int) -> numpy.ndarray:
         """
         Perform a Multi-bit Computation (MAC operation) on the specified matrix group.
