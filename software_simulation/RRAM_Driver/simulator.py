@@ -8,17 +8,21 @@ from RRAM_Driver._virtual_matrix import VirtualMatrix
 
 class RRAM_Simulator(RRAM_DriverInterface):
     """
-    RRAM_Simulator
-    ===============================================
-    負責管理多個 VirtualMatrix 實例。
-    
-    [關於 CNN Kernel 的處理]
-    對於 CNN (Convolutional Neural Network)，Submit 進來的矩陣應當是已經處理過的權重矩陣。
-    通常是 (Out_Channels, In_Channels * Kernel_H * Kernel_W) 的形狀。
-    Simulator 負責的是單純的矩陣乘法 (Matrix Multiplication)，
-    im2col 或其他 Tensor 展開的操作應由上層處理完畢後傳入。
+    RRAM Simulator
+    ===========================================================================
+    This class implements the RRAM_DriverInterface to manage multiple 
+    VirtualMatrix instances in a simulated environment.
 
-    ===============================================
+    Key Responsibilities:
+    1. Virtualization Management: Creates and manages VirtualMatrix objects.
+    2. Preprocessing Expectation: Expects incoming CNN weights to be pre-flattened 
+       (e.g., Out_Channels, In_Channels * Kernel_H * Kernel_W).
+    3. Execution: Orchestrates matrix multiplication computations without handling 
+       tensor unfolding (like im2col).
+    4. Statistics Tracking: Maintains detailed logical and physical operation 
+       statistics for power and performance estimation.
+    
+    ===========================================================================
     """
 
     def __init__(self, hw_rows=256, hw_cols=256, ideal_TF: bool = False):
@@ -33,12 +37,9 @@ class RRAM_Simulator(RRAM_DriverInterface):
         self.per_id_stats: Dict[str, dict] = dict()
         
         self._init_stats()
-        
         self.logger.info(f"Initialized with HW Size: {hw_rows}x{hw_cols}")
 
     def _init_stats(self):
-        """初始化統計數據字典"""
-        # 保留當前靜態狀態 (active tiles 與已燒錄的權重分佈)，避免 reset 時狀態被清空
         current_active = 0
         tiles_created = 0
         w_neg1 = 0
@@ -53,32 +54,24 @@ class RRAM_Simulator(RRAM_DriverInterface):
             w_1 = self.stats.get("total_programmed_weight_1", 0)
 
         self.stats = {
-            # --- 邏輯層 (Logical) 統計 ---
-            "logical_program_count": 0,    # submit 呼叫次數
-            "logical_multibit_ops": 0,     # compute_multibit 呼叫次數
+            "logical_program_count": 0,
+            "logical_multibit_ops": 0,
             
-            # --- 物理層 (Physical) 統計 - 更精確的功耗評估用 ---
-            "physical_tiles_programmed": 0, # 總共對多少個硬體 Tile 進行了寫入
-            "physical_multibit_ops": 0,     # 實際硬體執行 multibit 的總次數 (logical * tiles)
+            "physical_tiles_programmed": 0,
+            "physical_multibit_ops": 0,
             
-            # --- 資源狀態 ---
-            "active_tiles": current_active,       # 當前佔用的硬體 Tile 總數
-            "total_tiles_created": tiles_created, # 歷史總共創建過的 Tile 數
+            "active_tiles": current_active,
+            "total_tiles_created": tiles_created,
 
-            # --- 資料分佈統計 ---
-            # 權重是靜態的，保留
             "total_programmed_weight_neg1": w_neg1, 
             "total_programmed_weight_0": w_0, 
             "total_programmed_weight_1": w_1, 
             
-            # Input 是動態的，每次 Run 清零
             "total_computed_input_neg": 0, 
             "total_computed_input_0": 0, 
             "total_computed_input_pos": 0, 
         }
 
-        # 若是 Reset，也需要將個別 ID 裡面的「動態操作數據」歸零，
-        # 但必須保留靜態的權重分佈與 Tile 資源數量。
         if hasattr(self, 'per_id_stats'):
             for gid, stat in self.per_id_stats.items():
                 stat["logical_multibit_ops"] = 0
@@ -86,27 +79,30 @@ class RRAM_Simulator(RRAM_DriverInterface):
                 stat["computed_input_neg"] = 0
                 stat["computed_input_0"] = 0
                 stat["computed_input_pos"] = 0
-                # 注意：這裡沒有清空 stat["weight_stats"]，因為個別層的權重也是靜態的
 
     def submit_matrix(self, matrixes: List[np.ndarray]) -> str:
         """
-        將一組矩陣寫入模擬器。
-        
+        Register and program a list of matrices into the simulator.
+
+        Creates a VirtualMatrix to handle tiling and hardware mapping. Currently 
+        processes one logical layer at a time (primarily uses matrixes[0]).
+
         Args:
-            matrixes: 權重矩陣列表。
-                      目前 Simulator 架構設計為一次處理一個邏輯層 (Layer)，
-                      因此主要處理 matrixes[0]。
-                      若為 CNN，請確保傳入前已 Flatten 為 2D Matrix。
+            matrixes (List[np.ndarray]): A list containing the weight matrix to be programmed.
+
+        Returns:
+            str: A unique Group ID representing this specific submitted matrix.
+
+        Records:
+            - Increments 'logical_program_count' and 'total_tiles_created'.
+            - Updates 'physical_tiles_programmed' and 'active_tiles'.
+            - Accumulates weight distribution statistics (-1, 0, 1).
         """
         group_id = str(uuid.uuid4())[:8]
-        
-        # 取出主權重矩陣
         target_matrix = matrixes[0]
         
-        # 創建虛擬矩陣 (負責切割與分配硬體)
         v_matrix = VirtualMatrix(target_matrix, self.hw_rows, self.hw_cols)
         
-        # 更新全域統計數據
         self.stats["logical_program_count"] += 1
         self.stats["physical_tiles_programmed"] += v_matrix.total_tiles
         self.stats["active_tiles"] += v_matrix.total_tiles
@@ -132,10 +128,24 @@ class RRAM_Simulator(RRAM_DriverInterface):
         return group_id
 
     def clear_matrix(self, id: str) -> bool:
+        """
+        Release the hardware resources associated with a specific Group ID.
+
+        Frees up the simulated hardware tiles and updates global statistics.
+
+        Args:
+            id (str): The unique Group ID returned by `submit_matrix`.
+
+        Returns:
+            bool: True if the ID existed and was successfully cleared, False otherwise.
+
+        Records:
+            - Decrements 'active_tiles'.
+            - Subtracts the specific matrix's weight distribution from global statistics.
+        """
         if id in self.virtual_matrices:
             v_matrix = self.virtual_matrices.pop(id)
             
-            # [修正] 釋放資源時，同時扣除 Tiles 與全域權重統計
             self.stats["active_tiles"] -= v_matrix.total_tiles
             self.stats["total_programmed_weight_neg1"] -= v_matrix.weight_stats[VirtualMatrix.STATISTIC_WEIGHT_NEG1_KEY]
             self.stats["total_programmed_weight_0"] -= v_matrix.weight_stats[VirtualMatrix.STATISTIC_WEIGHT_0_KEY]
@@ -151,11 +161,22 @@ class RRAM_Simulator(RRAM_DriverInterface):
             return False
 
     def clear_all_matrix(self) -> bool:
+        """
+        Global Reset.
+
+        Clears all submitted matrices, releases all simulated hardware resources, 
+        and resets static resource counters.
+
+        Returns:
+            bool: True indicating the reset was successful.
+
+        Records:
+            - Resets 'active_tiles' and all static weight statistics to 0.
+        """
         cleared_count = len(self.virtual_matrices)
         self.virtual_matrices.clear()
         self.per_id_stats.clear()
         
-        # 全部清空時，所有靜態資源歸零
         self.stats["active_tiles"] = 0
         self.stats["total_programmed_weight_neg1"] = 0
         self.stats["total_programmed_weight_0"] = 0
@@ -165,33 +186,49 @@ class RRAM_Simulator(RRAM_DriverInterface):
         return True
 
     def compute_multibit(self, id: str, input_data: np.ndarray, bit_depth: int) -> np.ndarray:
+        """
+        Perform a Multi-bit Computation on the specified matrix group.
+
+        Flattens the input if necessary, processes vector by vector through the 
+        underlying VirtualMatrix, and reshapes the output to match the expected batch/sequence.
+
+        Args:
+            id (str): The Group ID to compute against.
+            input_data (np.ndarray): The multi-bit input array. The last dimension 
+                                     must match the matrix's input features.
+            bit_depth (int): The precision (number of bits) for the computation.
+
+        Returns:
+            np.ndarray: The result array of high precision integers.
+
+        Raises:
+            ValueError: If the ID is not found or if input features exceed matrix capacity.
+
+        Records:
+            - Increments 'logical_multibit_ops' and 'physical_multibit_ops'.
+            - Accumulates computed input statistics (negative, zero, positive).
+        """
         if id not in self.virtual_matrices:
             raise ValueError(f"Matrix ID {id} not found.")
         
         v_matrix = self.virtual_matrices[id]
         id_stat = self.per_id_stats[id] 
         
-        # 1. 儲存原始形狀與特徵維度
         original_shape = input_data.shape
         input_features = original_shape[-1]
         
         if input_features > v_matrix.orig_rows:
             raise ValueError(f"Input features {input_features} > Matrix In_Features {v_matrix.orig_rows}")
 
-        # 2. 攤平輸入 (Flatten) -> (N, In_Features)
         flat_input = input_data.reshape(-1, input_features)
         total_vectors = flat_input.shape[0]
         
-        # 3. 準備輸出緩衝區 (N, Out_Features)
         flat_output = np.zeros((total_vectors, v_matrix.orig_cols), dtype=np.int32)
         
-        # 4. 迴圈執行 (Vector by Vector)
         for i in range(total_vectors):
             vector = flat_input[i]
-            
             flat_output[i], in_stats = v_matrix.compute(vector, mode=VirtualMatrix.MODE_MULTIBIT, bit_depth=bit_depth)
             
-            # 更新統計：同步加到 全域 (self.stats) 與 個別 ID (id_stat)
             self.stats["logical_multibit_ops"] += 1
             self.stats["physical_multibit_ops"] += v_matrix.total_tiles * 2
             
@@ -206,18 +243,21 @@ class RRAM_Simulator(RRAM_DriverInterface):
             id_stat["computed_input_0"] += in_stats[VirtualMatrix.STATISTIC_INPUT_0_KEY]
             id_stat["computed_input_pos"] += in_stats[VirtualMatrix.STATISTIC_INPUT_POS_KEY]
 
-        # 5. 還原形狀 (Reshape) -> (Batch, Seq, Out_Features)
         final_output_shape = original_shape[:-1] + (v_matrix.orig_cols,)
         return flat_output.reshape(final_output_shape)
 
     def get_statistic(self, id: Union[str, None] = None) -> dict:
         """
-        回傳詳細統計數據。
-        
-        physical_* 數據可用於估算真實功耗
-        
+        Retrieve performance and usage statistics for power/performance modeling.
+
         Args:
-            id (str 或 None): 若為 None，回傳模擬器的所有統計資料；若為 ""，回傳模擬器的全域統計；若為特定 ID，回傳該 ID 的專屬統計。
+            id (Union[str, None], optional): 
+                - If None: Returns a dictionary containing all global and per-ID stats.
+                - If "": Returns only global statistics.
+                - If specific ID: Returns statistics relevant to that matrix group.
+
+        Returns:
+            dict: A dictionary containing the requested statistics.
         """
         if id is None:
             return {
@@ -236,7 +276,12 @@ class RRAM_Simulator(RRAM_DriverInterface):
     
     def reset_statistic(self) -> bool:
         """
-        重置累計統計數據 (Ops, Input), 但保留當前硬體佔用狀態與權重分佈。
+        Reset the cumulative statistics (Ops, Input counts) to zero.
+
+        Retains the current hardware occupancy status and weight distribution.
+
+        Returns:
+            bool: True indicating the reset was successful.
         """
         self.logger.info("Statistics Reset")
         self._init_stats()

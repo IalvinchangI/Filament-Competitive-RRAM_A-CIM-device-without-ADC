@@ -2,45 +2,67 @@ import numpy
 
 class RRAM_HardwareInterface():
     """
-    Filament Competitive RRAM 硬體抽象層介面 (Hardware Abstraction Layer Interface)
-    定義所有 Filament Competitive RRAM 實作 (Simulation / FPGA / ASIC) 必須遵守的標準 API。
+    RRAM Hardware Interface
+    ===========================================================================
+    This class serves as the Hardware Abstraction Layer (HAL) interface for 
+    Filament Competitive RRAM. 
+
+    Key Responsibilities:
+    1. Standardization: Defines the standard API that all Filament Competitive 
+       RRAM implementations (Simulation, FPGA, ASIC) must follow.
+    2. Hardware Control: Provides low-level commands for resetting and programming.
+    3. Computation: Exposes methods for multi-bit vector-matrix multiplication.
+    
+    ===========================================================================
     """
 
     # =====================================================================
-    # 系統控制 (System Control)
+    # Hardware Control
     # =====================================================================
 
     def reset_matrix(self):
         """
-        [指令] 矩陣重置 (Matrix Reset)
-        對硬體陣列執行全區塊抹除，所有權重回歸初始態 (通常為 0 / High-Z)。
+        Perform a global block erase on the hardware array.
+        
+        This resets all weights to their initial state (typically 0 or High-Z).
+
+        Raises:
+            NotImplementedError: Must be implemented by the subclass.
         """
         raise NotImplementedError()
 
     def program_matrix(self, matrix_data: numpy.ndarray):
         """
-        [指令] 寫入矩陣 (Program Matrix)
-        將權重資料寫入硬體陣列。
+        Program weight data into the hardware array.
 
         Args:
-            matrix_data: 2D numpy array, shape=(rows, cols).
-                         數值必須限制在 {-1, 0, 1}。
+            matrix_data (numpy.ndarray): A 2D numpy array representing the weights, 
+                                         shape=(rows, cols). Values must be restricted 
+                                         to {-1, 0, 1}.
+
+        Raises:
+            NotImplementedError: Must be implemented by the subclass.
         """
         raise NotImplementedError()
     
     # =====================================================================
-    # 運算指令 (Compute Instructions)
+    # Compute Instructions
     # =====================================================================
 
     def compute_multibit(self, input_data: numpy.ndarray, bit_depth: int = 8) -> numpy.ndarray:
         """
-        [指令] 多位元運算 (Multi-bit Compute / Temporal Mode)
-        執行高精度向量矩陣乘法，支援軟體定義精度 (Software Defined Precision)。
+        Perform high-precision vector-matrix multiplication (Temporal Mode).
+
+        Executes multi-bit computation supporting software-defined precision.
 
         Args:
-            input_data: 1D numpy array, shape=(rows,). 任意整數 (Integer)。
-            bit_depth: 運算位元深度 (e.g., 4, 8, 16)。
+            input_data (numpy.ndarray): A 1D numpy array of integers, shape=(rows,).
+            bit_depth (int, optional): The compute bit depth (e.g., 4, 8, 16). Defaults to 8.
+
         Returns:
-            output_vector: 1D numpy array, shape=(cols,). 高精度整數結果。
+            numpy.ndarray: A 1D numpy array of high-precision integer results, shape=(cols,).
+
+        Raises:
+            NotImplementedError: Must be implemented by the subclass.
         """
         raise NotImplementedError()

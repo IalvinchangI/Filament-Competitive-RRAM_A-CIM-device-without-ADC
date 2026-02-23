@@ -11,20 +11,24 @@ _logger = LoggingColor.get_logger("bitnet")
 
 def get_TernaryBitNet(checkpoint_path: str, device: str = "cpu") -> LlamaForCausalLM:
     """
-    Initializes and loads the BitNet b1.58 2B-4T model.
+    Initialize and load the BitNet b1.58 2B-4T model.
 
-    This function performs structural modifications to a standard Llama architecture
-    to match the BitNet specifications, including:
-    1. Injecting specific Sub-Layer Normalization (SubLN) layers.
-    2. Replacing standard Linear layers with BitLinear (1.58-bit).
-    3. Replacing activations with SquaredReLU.
+    Performs structural modifications to a standard Llama architecture
+    to match the BitNet specifications:
+    1. Injects specific Sub-Layer Normalization (SubLN) layers.
+    2. Replaces standard Linear layers with BitLinear (1.58-bit).
+    3. Replaces standard activations with SquaredReLU.
 
+    Note:
+        Pretrained weights for this model can be downloaded from Hugging Face:
+        https://huggingface.co/microsoft/bitnet-b1.58-2B-4T
+    
     Args:
         checkpoint_path (str): Path to the model weights (.pt, .bin, or .safetensors).
-        device (str): Device to load the weights onto (e.g., "cpu", "cuda").
+        device (str, optional): Device to load the weights onto (e.g., "cpu", "cuda"). Defaults to "cpu".
 
     Returns:
-        LlamaForCausalLM: The constructed BitNet model.
+        LlamaForCausalLM: The constructed and loaded BitNet model.
     """
 
     config = LlamaConfig(
@@ -43,21 +47,15 @@ def get_TernaryBitNet(checkpoint_path: str, device: str = "cpu") -> LlamaForCaus
 
     model = LlamaForCausalLM(config)
     
-    # 1. Structural Modification: Inject SubLN layers
-    # This aligns the model structure with the checkpoints provided by Microsoft.
     _inject_subln_structure(model, config)
     _logger.info(LoggingColor.color_text("SubLN structure injected.", LoggingColor.GREEN))
     
-    # 2. Linear Layer Replacement
-    # Replaces nn.Linear with BitLinear and wires the specific SubLN to the correct layers.
     _replace_linear(model)
     _logger.info(LoggingColor.color_text("Linear layers replaced with BitLinear.", LoggingColor.GREEN))
     
-    # 3. Activation Replacement
     _replace_activation(model)
     _logger.info(LoggingColor.color_text("Activations replaced with SquaredReLU.", LoggingColor.GREEN))
 
-    # 4. Load Weights
     if os.path.exists(checkpoint_path):
         _logger.info(f"Loading weights from {checkpoint_path}...")
         
@@ -66,7 +64,6 @@ def get_TernaryBitNet(checkpoint_path: str, device: str = "cpu") -> LlamaForCaus
         else:
             state_dict = torch.load(checkpoint_path, map_location=device, weights_only=False)
         
-        # Handle missing lm_head weight due to weight tying
         if "lm_head.weight" not in state_dict and "model.embed_tokens.weight" in state_dict:
             _logger.warning(LoggingColor.color_text("lm_head.weight not found. Cloning from embed_tokens (Weight Tying).", LoggingColor.WARNING))
             state_dict["lm_head.weight"] = state_dict["model.embed_tokens.weight"]
@@ -76,51 +73,41 @@ def get_TernaryBitNet(checkpoint_path: str, device: str = "cpu") -> LlamaForCaus
 
     return model
 
-def _inject_subln_structure(model: LlamaForCausalLM, config):
+def _inject_subln_structure(model: LlamaForCausalLM, config: LlamaConfig):
     """
-    Injects `attn_sub_norm` and `ffn_sub_norm` into Llama layers to match BitNet checkpoint structure.
+    Inject `attn_sub_norm` and `ffn_sub_norm` into Llama layers to match the BitNet structure.
     """
     for layer in model.model.layers:
-        # SubLN for Attention Output (O_proj)
         layer.self_attn.attn_sub_norm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        
-        # SubLN for MLP Output (Down_proj)
-        # Note: Dimension matches intermediate_size (6912)
         layer.mlp.ffn_sub_norm = LlamaRMSNorm(config.intermediate_size, eps=config.rms_norm_eps)
 
 def _replace_linear(model: LlamaForCausalLM):
     """
-    Replaces standard Linear layers with BitLinear and assigns SubLN references.
+    Replace standard Linear layers with BitLinear and assign SubLN references.
     
     Wiring Logic:
-    - Q, K, V, Gate, Up: Use standard pre-normalization (input_layernorm/post_attention_layernorm).
-    - O, Down: Use the injected SubLN (attn_sub_norm/ffn_sub_norm).
+    - Q, K, V, Gate, Up: Use standard pre-normalization.
+    - O, Down: Use the injected SubLN.
     """
     for name, module in model.named_modules():
         if isinstance(module, LlamaAttention):
             attn_norm = module.attn_sub_norm
             
-            # Q, K, V: No extra SubLN (already normalized by input_layernorm)
             module.q_proj = BitLinear(module.q_proj.in_features, module.q_proj.out_features, False, sub_norm=None)
             module.k_proj = BitLinear(module.k_proj.in_features, module.k_proj.out_features, False, sub_norm=None)
             module.v_proj = BitLinear(module.v_proj.in_features, module.v_proj.out_features, False, sub_norm=None)
-            
-            # O_proj: Uses attn_sub_norm
             module.o_proj = BitLinear(module.o_proj.in_features, module.o_proj.out_features, False, sub_norm=attn_norm)
 
         elif isinstance(module, LlamaMLP):
             ffn_norm = module.ffn_sub_norm
             
-            # Gate, Up: No extra SubLN (already normalized by post_attention_layernorm)
             module.gate_proj = BitLinear(module.gate_proj.in_features, module.gate_proj.out_features, False, sub_norm=None)
             module.up_proj = BitLinear(module.up_proj.in_features, module.up_proj.out_features, False, sub_norm=None)
-            
-            # Down_proj: Uses ffn_sub_norm
             module.down_proj = BitLinear(module.down_proj.in_features, module.down_proj.out_features, False, sub_norm=ffn_norm)
 
 def _replace_activation(model: LlamaForCausalLM):
     """
-    Replaces the activation function in MLP layers with SquaredReLU.
+    Replace the activation function in MLP layers with SquaredReLU.
     """
     for name, child in model.named_children():
         if "mlp" in name.lower():
@@ -130,15 +117,25 @@ def _replace_activation(model: LlamaForCausalLM):
 
 class BitLinear(nn.Linear):
     """
-    A Linear layer implementing 1.58-bit quantization (ternary weights) and 8-bit activation quantization.
-    Supports pluggable hardware drivers for matrix multiplication.
+    BitLinear (1.58-bit)
+    ===========================================================================
+    A Linear layer implementation designed for 1.58-bit (ternary) weight quantization 
+    and 8-bit input activation quantization.
+
+    Key Responsibilities:
+    1. Quantization: Manages the scaling and ternary clamping of weights {-1, 0, 1}, 
+       and 8-bit mapping of inputs.
+    2. Sub-Layer Normalization: Incorporates optional external RMSNorm processing 
+       before quantization.
+    3. Pluggable MatMul: Exposes a static method injection point to route matrix 
+       multiplication to custom hardware accelerators (e.g., RRAM Driver).
+    ===========================================================================
     """
 
     @staticmethod
-    def _default_matmul(x_quant, layer_instance: "BitLinear"):
+    def _default_matmul(x_quant: torch.Tensor, layer_instance: "BitLinear") -> torch.Tensor:
         """Default software implementation using PyTorch FP/INT operations."""
         w_quant = layer_instance.get_quantization_weights()
-        # Simulated linear operation using quantized values
         y_raw = F.linear(x_quant, w_quant, bias=None)
         return y_raw
 
@@ -147,11 +144,11 @@ class BitLinear(nn.Linear):
     @classmethod
     def set_matmul(cls, function=None):
         """
-        Sets the global matrix multiplication driver.
+        Set the global matrix multiplication driver for all BitLinear instances.
         
         Args:
-            function: A callable (x_quant, layer_id) -> output_tensor. 
-                      If None, reverts to default software simulation.
+            function (callable, optional): A function (x_quant, layer_id) -> output_tensor. 
+                                           If None, reverts to default software simulation.
         """
         if function is None:
             _logger.info(LoggingColor.color_text("[BitLinear] Mode Switch: Software Simulation (Default)", LoggingColor.GREEN))
@@ -166,66 +163,81 @@ class BitLinear(nn.Linear):
         _logger.info(LoggingColor.color_text("[BitLinear] Mode Switch: Hardware Acceleration (Driver Mounted)", LoggingColor.GREEN))
         cls._matmul = staticmethod(hardware_adapter)
 
-    def __init__(self, in_features, out_features, bias=False, sub_norm=None):
+    def __init__(self, in_features: int, out_features: int, bias: bool = False, sub_norm: nn.Module = None):
         """
         Args:
-            in_features: Size of each input sample.
-            out_features: Size of each output sample.
-            bias: If set to False, the layer will not learn an additive bias.
-            sub_norm: Optional LlamaRMSNorm instance for Sub-Layer Normalization.
+            in_features (int): Size of each input sample.
+            out_features (int): Size of each output sample.
+            bias (bool, optional): If set to True, the layer will learn an additive bias. Defaults to False.
+            sub_norm (nn.Module, optional): An external normalization instance (like LlamaRMSNorm). 
+                                            Defaults to None.
         """
         super(BitLinear, self).__init__(in_features, out_features, bias=False)
         
-        # Use a list container to hold the reference to the external Norm layer.
-        # This prevents PyTorch from registering it as a child parameter of this layer,
-        # avoiding 'missing key' errors during state_dict loading.
         self._norm_container = [sub_norm] if sub_norm is not None else []
-        
         self.layer_id: str = None
         self.register_buffer('weight_scale', None)
 
     def calculate_weight_scale(self):
-        """Calculates the average absolute value of weights (gamma)."""
+        """Calculate and store the average absolute value of weights (gamma)."""
         with torch.no_grad():
             self.weight_scale = self.weight.abs().mean().clamp(min=1e-5)
     
-    def get_quantization_weights(self):
-        """Quantizes weights to ternary values {-1, 0, 1}."""
+    def get_quantization_weights(self) -> torch.Tensor:
+        """
+        Quantize weights to ternary values {-1, 0, 1}.
+
+        Returns:
+            torch.Tensor: The quantized weight tensor.
+        """
         if self.weight_scale is None:
              self.calculate_weight_scale()
         return torch.round(self.weight / self.weight_scale).clamp(-1, 1)
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Forward pass applying SubLN, input quantization, and matrix multiplication.
+
+        Args:
+            x (torch.Tensor): The input tensor.
+
+        Returns:
+            torch.Tensor: The dequantized output tensor.
+        """
         if self.weight_scale is None:
             self.calculate_weight_scale()
 
-        # 1. SubLN (Reference Call)
-        # Apply external normalization if injected (e.g., for O_proj and Down_proj)
         if self._norm_container:
             x_norm = self._norm_container[0](x)
         else:
             x_norm = x 
         
-        # 2. Input Quantization (Absmax)
         x_absmax = x_norm.abs().max(dim=-1, keepdim=True)[0].clamp(min=1e-5)
         input_scale = 127.0 / x_absmax
         x_quant = (x_norm * input_scale).round().clamp(-128, 127)
 
-        # 3. Matrix Multiplication (Driver-dependent)
         y_raw = self._matmul(x_quant, self)
 
-        # 4. Dequantization
-        # Rescale the integer output back to floating point
         output = y_raw * (self.weight_scale / input_scale)
         
         return output
 
 class SquaredReLU(nn.Module):
     """
-    Squared ReLU activation function: f(x) = max(0, x)^2
+    Squared ReLU Activation Function
+    ===========================================================================
+    Applies the element-wise function: f(x) = max(0, x)^2
+    ===========================================================================
     """
     def __init__(self):
         super().__init__()
         
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Args:
+            x (torch.Tensor): The input tensor.
+
+        Returns:
+            torch.Tensor: The activated output tensor.
+        """
         return F.relu(x).pow(2)

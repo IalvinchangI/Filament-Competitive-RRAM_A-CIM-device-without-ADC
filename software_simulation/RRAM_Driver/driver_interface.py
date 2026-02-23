@@ -13,6 +13,7 @@ class RRAM_DriverInterface():
     2. Virtualization: Maps logical matrices (User view) to physical hardware tiles (Hardware view).
     3. Auto-Tiling: Automatically splits matrices larger than the hardware dimensions.
     4. Performance Monitoring: Tracks usage statistics (Ops, Cycles, Program Counts) for power estimation.
+    
     ===========================================================================
     """
 

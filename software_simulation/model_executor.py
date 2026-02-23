@@ -10,13 +10,19 @@ from utils import LoggingColor
 
 class ModelExecutor():
     """
-    ModelExecutor
-    ===============================================
-    1. 執行模型
-    2. 將需要的運算外交給 simulator 算
-    3. 總結效能: 把 simulator 統整的資訊輸出到檔案
+    Model Executor
+    ===========================================================================
+    This class orchestrates the execution of machine learning models and handles 
+    hardware integration and performance logging.
+
+    Key Responsibilities:
+    1. Execution Management: Executes the loaded model and tracks its runtime.
+    2. Hardware Offloading: Delegates matrix computations to the configured 
+       RRAM driver or simulator via the Model Loader.
+    3. Performance Summarization: Collects execution statistics and exports 
+       logs and binary data to the designated local storage.
     
-    ===============================================
+    ===========================================================================
     """
 
     LOG_DIR = Path(os.getcwd()).resolve() / "data" / "logs"
@@ -31,18 +37,26 @@ class ModelExecutor():
 
     def config_driver(self, driver: RRAM_DriverInterface):
         """
-        config all the things related to driver
+        Configure the hardware driver for the executor.
+
+        Args:
+            driver (RRAM_DriverInterface): The initialized hardware driver.
         """
         self._driver = driver
 
     def load(self, model_loader: BasicModelLoader):
         """
-        config model loader
-        submit matrixes into driver
+        Mount a model loader and trigger hardware configuration.
+
+        If another loader is currently active, it unloads it first to release 
+        resources. Then, it submits the necessary matrices to the hardware driver.
+
+        Args:
+            model_loader (BasicModelLoader): The model loader to be executed.
         """
-        # 如果已經有載入的 loader，先進行卸載以釋放資源
         if self._current_loader is not None:
             self.unload()
+            
         self._current_loader = model_loader
         
         if self._driver is None:
@@ -53,45 +67,49 @@ class ModelExecutor():
             ))
         else:
             self._logger.info(f"Configuring loader: {model_loader.__class__.__name__}...")
-            # 關鍵步驟：呼叫 Loader 的 config，這通常會觸發權重寫入 (driver.submit_matrix)
             self._current_loader.config(self._driver)
 
     def unload(self):
         """
-        unload current model_loader if exists
+        Unload the current model loader and release hardware resources.
         """
         if self._current_loader is not None:
             self._logger.info("Unloading current loader...")
-            # 呼叫 Loader 的 unload，這通常會觸發清除矩陣 (driver.clear_matrix)
             self._current_loader.unload()
             self._current_loader = None
 
     def run(self, input_data: numpy.ndarray, input_command: str = None) -> numpy.ndarray:
         """
-        pass input_data into model_loader
-        user can invoke a loader-specified function via input_command
+        Pass input data into the model loader and track execution statistics.
+
+        Handles both standard synchronous execution and asynchronous stream generation.
+
+        Args:
+            input_data (numpy.ndarray): The processed input data/tokens.
+            input_command (str, optional): The command specifying the execution mode.
+
+        Returns:
+            numpy.ndarray: The result data or stream tracker from the model loader.
+
+        Raises:
+            RuntimeError: If no model loader is currently loaded.
         """
         if self._current_loader is None:
             raise RuntimeError("No model loader is currently loaded. Please call load() first.")
         
-        # 1. 紀錄開始時間
         start_time = time.time()
 
-        # 2. 轉發給 Loader 執行
         result = self._current_loader.run(input_data, input_command)
 
-        # 4. 收集執行資訊與統計數據
         driver_name = self._driver.__class__.__name__ if self._driver else "None"
         loader_name = self._current_loader.__class__.__name__
         
-        # 紀錄輕量化的輸入維度資訊 (供 JSON 閱讀)
         input_info = {
             "type": type(input_data).__name__,
             "shape": list(input_data.shape) if hasattr(input_data, "shape") else None,
             "dtype": str(input_data.dtype) if hasattr(input_data, "dtype") else None
         }
 
-        # 5. 將紀錄打包並存入歷史串列
         record = {
             "timestamp": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(start_time)),
             "loader": loader_name, 
@@ -107,17 +125,14 @@ class ModelExecutor():
 
         if hasattr(result, "register_on_finish_callback") and callable(result.register_on_finish_callback):
             def on_finish_handler():
-                # 這個 block 會在串流全部印完時才被執行
                 end_time = time.time()
                 record["duration_seconds"] = round(end_time - start_time, 4)
                 if self._driver is not None:
-                    # 抓取並清空剛才背景跑出來的硬體數據
                     record["driver_statistics"] = self._driver.get_statistic()
                     self._driver.reset_statistic()
                 
                 self._logger.info(LoggingColor.color_text(f"Stream finished in {record['duration_seconds']:.4f}s. Stats recorded.", LoggingColor.CYAN))
 
-            # 註冊給 Tracker
             result.register_on_finish_callback(on_finish_handler)
             self._logger.info(LoggingColor.color_text("Stream generation started in background...", LoggingColor.CYAN))
         
@@ -133,7 +148,12 @@ class ModelExecutor():
         return result
 
     def __save_vector(self, dir_path: Path, pickle_filename: str, raw_input_data) -> str:
-        """ return pickle filename """
+        """
+        Helper method to save raw data as a pickle file.
+        
+        Returns:
+            str: The filename if successful, None otherwise.
+        """
         pickle_filepath = dir_path / pickle_filename
         try:
             with open(pickle_filepath, 'wb') as pf:
@@ -145,7 +165,14 @@ class ModelExecutor():
 
     def save_info(self, prefix: str = None):
         """
-        log statistic data in the driver into a file specified by path
+        Export logged statistics and raw data to the local file system.
+
+        Creates a unique directory for each execution record containing a JSON 
+        log file and pickle files for the raw inputs and outputs.
+
+        Args:
+            prefix (str, optional): The prefix for the log directory name. 
+                                    Defaults to DEFAULT_LOG_PREFIX.
         """
         if not self._history:
             self._logger.warning(LoggingColor.color_text("No history records to save.", LoggingColor.WARNING))
@@ -156,27 +183,22 @@ class ModelExecutor():
         
         saved_count = 0
         for record in self._history:
-            # 1. 建立該次執行的專屬資料夾
-            # 將時間格式轉換為安全的資料夾名稱 (ex: 2026-02-19 14:30:00 -> 20260219_143000)
             safe_time = record["timestamp"].replace("-", "").replace(":", "").replace(" ", "_")
             run_folder_name = f"{prefix}_{safe_time}_{record['loader']}_{record['driver']}"
             dir_path = self.LOG_DIR / run_folder_name
             os.makedirs(dir_path, exist_ok=True)
 
-            # 淺拷貝一份，以免修改到還在記憶體中的原始歷史紀錄
             rec_copy = record.copy()
             
-            # 抽出 raw data
             raw_input_data  = rec_copy.pop("_raw_input_data", None)
             raw_output_data = rec_copy.pop("_raw_output_data", None)
+            
             if hasattr(raw_output_data, "get_full_result") and callable(raw_output_data.get_full_result):
                 raw_output_data = raw_output_data.get_full_result()
             
-            # 2. 儲存 Pickle
             rec_copy["input_pickle_file"]  = self.__save_vector(dir_path, "input.pickle",  raw_input_data)
             rec_copy["output_pickle_file"] = self.__save_vector(dir_path, "output.pickle", raw_output_data)
 
-            # 3. 儲存 JSON (包含此次執行所有的 log 與統計)
             json_filepath = dir_path / "log.json"
             try:
                 with open(json_filepath, 'w', encoding='utf-8') as f:
@@ -189,7 +211,7 @@ class ModelExecutor():
 
     def clear_info_cache(self):
         """
-        reset statistic data in the driver & records in the executor
+        Clear the internal execution history and reset hardware statistics.
         """
         if self._driver is not None:
             self._driver.reset_statistic()
