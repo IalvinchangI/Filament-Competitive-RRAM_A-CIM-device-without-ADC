@@ -1,8 +1,10 @@
 # 競爭型RRAM - 無ADC的算存一體元件 (Filament Competitive RRAM - A CIM device without ADC)
 
 > **Competition:** [美光半導體創新應用競賽 (Micron Mimory Awards)](https://www.micron-mimoryawards.org.tw/)
+> 
 > **Category:** Device Design and Development Category (元件/裝置設計開發組)
-> **Team ID:** 2526_C_0039
+> 
+> **Team ID:** 2526_C_0039 
 
 ## Introduction
 
@@ -23,7 +25,7 @@
 ### Architecture
 
 <p align="center">
-  <img src="assets/architecture.svg" width="80%" alt="System Architecture" style="border: 1px solid #d0d7de; border-radius: 8px; padding: 5px; background-color: #ffffff;">
+  <img src="assets/architecture.svg" width="80%" alt="System Architecture">
 </p>
 
 系統的軟體架構被設計為高度解耦的四個主要抽象層：
@@ -39,8 +41,8 @@
 
 ### Installation
 
-1.  **環境需求:** 請使用 **Python 3.10** 版本。
-2.  **安裝依賴:** 請透過專案提供的 `requirements.txt` 進行環境建置。在終端機中執行以下指令：
+1.  **環境需求：** 請使用 **Python 3.10** 版本。
+2.  **安裝依賴：** 請透過專案提供的 `requirements.txt` 進行環境建置。在終端機中執行以下指令：
     ```bash
     pip install -r requirements.txt
     ```
@@ -57,7 +59,7 @@
     python register_model.py
     ```
     * 該腳本在主程式中會呼叫 `ModelImportHandler.import_all_model()`。
-    * 它會嘗試尋找並載入預設的 `BitNet_2B4T.safetensors` 權重檔案，將其初始化為 `NLP_BitNet_2B4T_TNN` 模型。如果沒有預訓練權重檔案，請至 [Hugging Face](https://huggingface.co/microsoft/bitnet-b1.58-2B-4T) 下載微軟開源的模型權重。
+    * 它會嘗試尋找並載入預設的 `BitNet_2B4T.safetensors` 權重檔案，將其初始化為 `NLP_BitNet_2B4T_TNN` 模型。如果沒有預訓練權重檔案，請至 [Hugging Face](https://huggingface.co/microsoft/bitnet-b1.58-2B-4T-bf16) 下載微軟開源的模型權重。
     * 處理完成後，`ModelImportHandler` 會自動將模型轉換並儲存至專案預設的目錄下（即 `data/model/NLP_BitNet_2B4T_TNN.pickle`）。
 
 
