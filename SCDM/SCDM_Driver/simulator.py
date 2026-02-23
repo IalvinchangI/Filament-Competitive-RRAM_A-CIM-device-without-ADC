@@ -193,10 +193,10 @@ class SCDM_Simulator(SCDM_DriverInterface):
             
             # 更新統計：同步加到 全域 (self.stats) 與 個別 ID (id_stat)
             self.stats["logical_multibit_ops"] += 1
-            self.stats["physical_multibit_ops"] += v_matrix.total_tiles
+            self.stats["physical_multibit_ops"] += v_matrix.total_tiles * 2
             
             id_stat["logical_multibit_ops"] += 1
-            id_stat["physical_multibit_ops"] += v_matrix.total_tiles
+            id_stat["physical_multibit_ops"] += v_matrix.total_tiles * 2
                 
             self.stats["total_computed_input_neg"] += in_stats[VirtualMatrix.STATISTIC_INPUT_NEG_KEY]
             self.stats["total_computed_input_0"] += in_stats[VirtualMatrix.STATISTIC_INPUT_0_KEY]
