@@ -1,6 +1,6 @@
 import torch
 import numpy
-from transformers import AutoTokenizer, TextIteratorStreamer
+from transformers import AutoTokenizer, TextIteratorStreamer, StoppingCriteria, StoppingCriteriaList
 from threading import Thread
 import traceback
 import gc
@@ -111,8 +111,9 @@ class TernaryBitNetLoader(BasicModelLoader):
             for new_text in stream_result:
                 print(new_text, end="", flush=True)
         except Exception as e:
-            # TODO stop thread
-            cls._logger.error(f"Stream decoding error: {e}")
+            if hasattr(stream_result, 'send_stop'):
+                stream_result.send_stop()
+            cls._logger.error(LoggingColor.color_text(f"Stream decoding error: {e}", LoggingColor.ERROR))
 
     def __init__(self, model_path: str):
         super().__init__()
@@ -232,6 +233,8 @@ class TernaryBitNetLoader(BasicModelLoader):
                 # 2. 建立 Streamer (這是一個 Iterator)
                 # skip_prompt=True: 不重複回傳輸入的字
                 streamer = TextIteratorStreamer(self._tokenizer, skip_prompt=True, skip_special_tokens=True, timeout=self.STREAM_GENERATE_TIMEOUT)
+                tracker = TextStreamTracker(streamer)
+                stopping_criteria = StoppingCriteriaList([self.StopSignalCriteria(tracker)])
 
                 # 3. 設定生成參數
                 generation_kwargs = dict(
@@ -240,7 +243,8 @@ class TernaryBitNetLoader(BasicModelLoader):
                     streamer=streamer, 
                     max_new_tokens=self.MAX_TOKEN, 
                     pad_token_id=self.model.config.eos_token_id, 
-                    do_sample=(not self.FIX_OUTPUT_GENERATION)
+                    do_sample=(not self.FIX_OUTPUT_GENERATION), 
+                    stopping_criteria=stopping_criteria
                 )
 
                 # 4. 在子執行緒中啟動生成
@@ -249,7 +253,7 @@ class TernaryBitNetLoader(BasicModelLoader):
 
                 # 5. 直接回傳 Streamer (Generator)
                 # 外部可以用 `for text in result: print(text)` 來接收
-                return TextStreamTracker(streamer)
+                return tracker
 
             else:
                 self._logger.warning(LoggingColor.color_text(f"⚠️ Unknown command: {input_command}", LoggingColor.WARNING))
@@ -286,6 +290,12 @@ class TernaryBitNetLoader(BasicModelLoader):
             "max_token": self.MAX_TOKEN
         }
 
+    class StopSignalCriteria(StoppingCriteria):
+        def __init__(self, tracker: "TextStreamTracker"):
+            self.tracker = tracker
+            
+        def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> bool:
+            return self.tracker.stop_signal
 
 
 class TextStreamTracker:
@@ -298,6 +308,11 @@ class TextStreamTracker:
         self.streamer = streamer
         self._accumulated_text = ""
         self._on_finish_callback = None
+        self.stop_signal = False
+    
+    def send_stop(self):
+        """觸發停止訊號"""
+        self.stop_signal = True
     
     def register_on_finish_callback(self, callback):
         """允許外部註冊一個在串流結束時觸發的函式"""
