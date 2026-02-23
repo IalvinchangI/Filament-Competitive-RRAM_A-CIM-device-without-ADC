@@ -2,7 +2,7 @@
 
 > **Competition:** [美光半導體創新應用競賽 (Micron Mimory Awards)](https://www.micron-mimoryawards.org.tw/)
 > 
-> **Category:** Device Design and Development Category (元件/裝置設計開發組)
+> **Category:** Device Design and Development Category (元件設計開發組)
 > 
 > **Team ID:** 2526_C_0039 
 
