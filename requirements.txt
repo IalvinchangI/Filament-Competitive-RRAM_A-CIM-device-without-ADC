@@ -1,3 +1,4 @@
+--extra-index-url https://download.pytorch.org/whl/cu130
 accelerate==1.12.0
 anyio==4.12.1
 certifi==2026.1.4
@@ -7,7 +8,7 @@ colorama==0.4.6
 contourpy==1.3.2
 cycler==0.12.1
 exceptiongroup==1.3.1
--e git+https://github.com/IalvinchangI/Filament-Competitive-RRAM_A-CIM-device-without-ADC.git@6b992748e44c3d8144c472c5e2e4928223c50056#egg=Filament_Competitive_RRAM
+-e git+https://github.com/IalvinchangI/Filament-Competitive-RRAM_A-CIM-device-without-ADC.git@c0346cc78b85877e3eb8a8076ffcc994e9a055b3#egg=Filament_Competitive_RRAM
 filelock==3.20.0
 fonttools==4.61.1
 fsspec==2025.12.0
@@ -36,7 +37,6 @@ PyYAML==6.0.3
 regex==2026.1.15
 requests==2.32.5
 safetensors==0.7.0
--e git+https://github.com/IalvinchangI/Filament-Competitive-RRAM_A-CIM-device-without-ADC.git@6b992748e44c3d8144c472c5e2e4928223c50056#egg=SCDM
 scipy==1.15.3
 shellingham==1.5.4
 six==1.17.0
